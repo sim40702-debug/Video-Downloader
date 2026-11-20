@@ -85,7 +85,7 @@ class App(ctk.CTk):
         self.progresso_obiettivo = 0.0
         self.pulsazione_accesa = False
         self.immagine_copertina = None
-        self.aggiornamento = None        # versione nuova trovata su Gitea
+        self.aggiornamento = None        # versione nuova trovata su GitHub
 
         # Font
         self.font_titolo = ctk.CTkFont(size=22, weight="bold")
@@ -455,10 +455,8 @@ class App(ctk.CTk):
     def _chiedi_se_aggiornare(self):
         nuova = self.aggiornamento
         note = nuova["note"][:600] or "Nessuna nota."
-        server = nuova["server"].replace("http://", "")
         domanda = (f"E' disponibile la versione {nuova['versione']} "
                    f"(tu hai la {agg.VERSIONE}).\n\nNovita':\n{note}\n\n"
-                   f"Server usato: {server}\n\n"
                    "Vuoi aggiornare adesso?")
         if not messagebox.askyesno("Aggiornamento disponibile", domanda):
             return
@@ -466,7 +464,7 @@ class App(ctk.CTk):
         self.pulsante_aggiorna.configure(state="disabled")
         self.progresso_obiettivo = 0
         self.barra.configure(progress_color=BLU)
-        self._stato_download(f"Scarico l'aggiornamento da {server}...", TESTO)
+        self._stato_download("Scarico l'aggiornamento da GitHub...", TESTO)
         thread = threading.Thread(target=self._lavoro_aggiornamento, args=(nuova,),
                                   daemon=True)
         thread.start()
@@ -632,7 +630,6 @@ class App(ctk.CTk):
         # --- messaggi degli aggiornamenti ---
         elif tipo == "agg_controllo":
             risultato, silenzioso = dati
-            server = risultato["server"].replace("http://", "")
             nuova = risultato if risultato["disponibile"] else None
             self.aggiornamento = nuova
             self.pulsante_aggiorna.configure(state="normal")
@@ -646,8 +643,7 @@ class App(ctk.CTk):
                 self.pulsante_aggiorna.configure(text="Aggiornamenti")
                 if not silenzioso:
                     messagebox.showinfo("Aggiornamenti",
-                                        f"Hai gia' l'ultima versione (v{agg.VERSIONE}).\n\n"
-                                        f"Server usato: {server}")
+                                        f"Hai gia' l'ultima versione (v{agg.VERSIONE}).")
 
         elif tipo == "agg_errore_controllo":
             testo, silenzioso = dati

@@ -2,7 +2,7 @@
 
 App desktop per **macOS** (Apple Silicon e Intel) e **Windows** per scaricare **video MP4** e **audio MP3** da link di YouTube, quando il download è consentito.
 
-Fatta in Python con CustomTkinter (grafica), yt-dlp (download) e FFmpeg (conversioni). Si aggiorna da sola prendendo le nuove versioni dal server **Gitea di casa**.
+Fatta in Python con CustomTkinter (grafica), yt-dlp (download) e FFmpeg (conversioni). Si aggiorna da sola prendendo le nuove versioni dalle **release di GitHub**.
 
 > Usala solo per contenuti che hai il diritto di scaricare: video tuoi, con licenza Creative Commons, o per cui l'autore lo permette. Rispetta i Termini di servizio di YouTube e il diritto d'autore.
 
@@ -17,7 +17,7 @@ Fatta in Python con CustomTkinter (grafica), yt-dlp (download) e FFmpeg (convers
 - Puoi **annullare** in ogni momento: i file a metà vengono cancellati.
 - Se il file esiste già non lo sovrascrive: crea `Titolo (2).mp4`.
 - **Apri cartella** ti mostra il file scaricato.
-- Pulsante **Aggiornamenti**: controlla su Gitea se c'è una versione nuova e la installa da solo.
+- Pulsante **Aggiornamenti**: controlla su GitHub se c'è una versione nuova e la installa da solo.
 
 ---
 
@@ -80,7 +80,7 @@ Copia la cartella `dist\Video Downloader` in `%LOCALAPPDATA%\Programs\` e crea u
 
 ## 5. Gitea: preparazione (una volta sola)
 
-1. Su Gitea (`http://192.168.1.118:3000`) crea il repository **`Simone/Video-Downloader`**, **pubblico** e **vuoto** (senza README). Pubblico serve perché l'app possa leggere le release senza password.
+1. Su Gitea (`http://192.168.1.118:3000`) crea il repository **`Simone/Video-Downloader`**, **vuoto** (senza README).
 2. Crea un token: **Impostazioni → Applicazioni → Genera token**, permesso *repository: lettura e scrittura*.
 3. Salva il token nel file **`.gitea-token`** nella cartella del progetto (sia sul Mac sia sul PC Windows). Git lo ignora: non finisce mai su GitHub.
 
@@ -112,14 +112,14 @@ Se lo lanci di nuovo senza cambiare versione, ricompila e **sostituisce** lo zip
 
 ## 7. Come funzionano gli aggiornamenti
 
-All'avvio l'app chiede a Gitea l'ultima release: prova prima **192.168.1.118** (cavo) e poi **192.168.1.153**, e nel messaggio dice quale server ha usato. Fuori casa nessuno dei due risponde e l'app non dice niente.
+All'avvio l'app chiede a **GitHub** l'ultima release (https://github.com/sim40702-debug/YouTube-Downloader/releases). Funziona ovunque, anche fuori casa.
 
 Se c'è una versione nuova il pulsante diventa blu (**Aggiorna a v1.0.1**). Cliccandolo:
 
 - **app compilata**: scarica lo zip giusto per il computer (Windows, Mac Apple Silicon o Mac Intel), chiude l'app, sostituisce la vecchia e la riapre;
 - **avviata dal codice** (`main.py`): fa `git pull` e aggiorna le librerie.
 
-Su un Mac Intel l'aggiornamento automatico funziona solo se nella release c'è lo zip `...-macOS-intel.zip`. La GitHub Action lo compila (vedi sotto): puoi scaricarlo dalla release di GitHub e caricarlo a mano su Gitea.
+Gitea resta la copia di casa delle versioni (`npm run rilascia`), ma l'app si aggiorna da GitHub.
 
 ## 8. Release su GitHub (automatica)
 
@@ -140,7 +140,7 @@ Quindi per una nuova versione su GitHub basta `npm run rilascia git`. Si può an
 ```
 
 - `test_downloader.py`: link, numeri, qualità, nomi dei file, errori, cartelle; più **download veri** da un server locale (MP4, MP3, annullamento). Non serve Internet.
-- `test_aggiornamenti.py`: versioni, file giusto per ogni sistema, scelta del server .118/.153, script che sostituisce l'app.
+- `test_aggiornamenti.py`: versioni, file giusto per ogni sistema, controllo su GitHub, script che sostituisce l'app.
 - `test_interfaccia.py`: apre la finestra senza mostrarla e prova i pulsanti.
 
 ---
@@ -152,7 +152,7 @@ Video-Downloader/
 ├── main.py                           avvio: controlla le librerie e apre la finestra
 ├── interface.py                      grafica (CustomTkinter)
 ├── downloader.py                     logica di download (yt-dlp + FFmpeg)
-├── aggiornamenti.py                  versione dell'app e aggiornamenti da Gitea
+├── aggiornamenti.py                  versione dell'app e aggiornamenti da GitHub
 ├── pubblica_release.py               carica lo zip nella release su Gitea
 ├── crea_icona.py                     disegna l'icona per Mac e Windows
 ├── requirements.txt                  librerie Python
@@ -183,7 +183,7 @@ Come funziona dentro, in breve:
 | "Manca tkinter" | Mac: `brew install python-tk`. Windows: reinstalla Python da python.org |
 | macOS blocca l'app | Clic destro → Apri, oppure `xattr -dr com.apple.quarantine "dist/Video Downloader.app"` |
 | Windows dice "PC protetto" | Clicca "Ulteriori informazioni" → "Esegui comunque" |
-| "Il server Gitea di casa non risponde" | Sei fuori casa o il Lenovo è spento |
-| "Nessuna release (o repository non pubblico)" | Rendi pubblico il repository su Gitea, oppure pubblica la prima release |
+| `npm run rilascia`: "nessun server Gitea risponde" | Sei fuori casa o il Lenovo è spento |
+| "Impossibile contattare GitHub" | Controlla la connessione a Internet |
 | "Token non valido" | Rigenera il token su Gitea e rimettilo in `.gitea-token` |
 | Un video 4K non si apre con QuickTime | Il 4K di YouTube usa codec che QuickTime non sempre legge: usa VLC o IINA |

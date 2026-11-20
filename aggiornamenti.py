@@ -1,20 +1,18 @@
 """
 aggiornamenti.py
 ----------------
-Controlla se sul server Gitea di casa c'e' una versione nuova e la installa.
+Controlla se su GitHub c'e' una versione nuova e la installa.
+Le release sono qui: https://github.com/sim40702-debug/YouTube-Downloader/releases
 
 Come funziona:
-1. Prova il server 192.168.1.118 (cavo, piu' veloce); se non risponde
-   prova il 192.168.1.153. Fuori casa nessuno dei due risponde: pazienza.
-2. Legge l'ultima release del repository e la confronta con VERSIONE.
+1. Chiede a GitHub l'ultima release (funziona ovunque, anche fuori casa).
+2. La confronta con VERSIONE.
 3. Se e' piu' nuova:
    - app compilata (Mac .app o Windows .exe) -> scarica lo zip giusto per
      questo computer, chiude l'app, sostituisce la vecchia e la riapre;
    - da codice (main.py) -> fa "git pull" e aggiorna le librerie.
 
 VERSIONE la cambia "npm run rilascia git": non serve toccarla a mano.
-Il repository su Gitea deve essere PUBBLICO, cosi' l'app legge le release
-senza token.
 """
 
 import json
@@ -29,7 +27,6 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
-from urllib.parse import urlsplit
 
 try:
     import certifi
@@ -39,13 +36,9 @@ except ImportError:
 
 VERSIONE = "1.0.0"
 
-# Server Gitea di casa: il primo e' quello preferito (collegato a cavo)
-SERVER_GITEA = [
-    "http://192.168.1.118:3000",
-    "http://192.168.1.153:3000",
-]
-# Repository su Gitea: "utente/nome"
-REPOSITORY = "Simone/Video-Downloader"
+# Repository su GitHub da cui prendere gli aggiornamenti: "utente/nome"
+REPOSITORY_GITHUB = "sim40702-debug/YouTube-Downloader"
+INDIRIZZO_API = f"https://api.github.com/repos/{REPOSITORY_GITHUB}/releases/latest"
 
 NOME_APP = "Video Downloader"
 SU_WINDOWS = sys.platform == "win32"
@@ -107,16 +100,6 @@ def scegli_file(release, tipo=None):
     return None
 
 
-def indirizzo_dal_server(indirizzo, server):
-    """
-    Gitea a volte scrive nei link un indirizzo diverso (es. localhost).
-    Teniamo il percorso del file ma usiamo il server che ha risposto.
-    """
-    parti = urlsplit(indirizzo)
-    percorso = parti.path + ("?" + parti.query if parti.query else "")
-    return server.rstrip("/") + percorso
-
-
 def e_app_compilata():
     """True se stiamo girando nell'app compilata con PyInstaller."""
     return getattr(sys, "frozen", False)
@@ -144,7 +127,7 @@ def _contesto_ssl():
 
 def _leggi_json(indirizzo, timeout):
     richiesta = urllib.request.Request(indirizzo, headers={
-        "Accept": "application/json", "User-Agent": "Video-Downloader"})
+        "Accept": "application/vnd.github+json", "User-Agent": "Video-Downloader"})
     with urllib.request.urlopen(richiesta, timeout=timeout, context=_contesto_ssl()) as risposta:
         return json.loads(risposta.read().decode("utf-8"))
 
@@ -153,46 +136,29 @@ def _leggi_json(indirizzo, timeout):
 # 1) Controllo
 # ------------------------------------------------------------------
 
-def trova_server():
-    """Restituisce il primo server Gitea che risponde, oppure None."""
-    for server in SERVER_GITEA:
-        try:
-            _leggi_json(f"{server}/api/v1/version", timeout=3)
-            return server
-        except Exception:
-            continue
-    return None
-
-
 def controlla():
     """
-    Chiede a Gitea l'ultima release.
-    Restituisce un dizionario: "disponibile" e' True se c'e' una versione
-    nuova; "server" dice quale server ha risposto.
-    Se il server non risponde solleva RuntimeError.
+    Chiede a GitHub l'ultima release.
+    Restituisce un dizionario: "disponibile" e' True se c'e' una versione nuova.
+    Se GitHub non risponde solleva RuntimeError.
     """
-    server = trova_server()
-    if server is None:
-        raise RuntimeError("Il server Gitea di casa non risponde.\n"
-                           "Sei collegato alla rete di casa?")
-
-    indirizzo = f"{server}/api/v1/repos/{REPOSITORY}/releases/latest"
     try:
-        release = _leggi_json(indirizzo, timeout=10)
+        release = _leggi_json(INDIRIZZO_API, timeout=10)
     except urllib.error.HTTPError as errore:
         if errore.code == 404:
-            raise RuntimeError("Su Gitea non c'e' ancora nessuna release\n"
-                               "(oppure il repository non e' pubblico).")
-        raise RuntimeError(f"Gitea ha risposto con l'errore {errore.code}.")
+            raise RuntimeError("Su GitHub non c'e' ancora nessuna release.")
+        if errore.code == 403:
+            raise RuntimeError("Troppi controlli in poco tempo: riprova tra un'ora.")
+        raise RuntimeError(f"GitHub ha risposto con l'errore {errore.code}.")
     except Exception:
-        raise RuntimeError("Impossibile leggere le release da Gitea.")
+        raise RuntimeError("Impossibile contattare GitHub. Controlla la connessione.")
 
     versione = release.get("tag_name", "")
     return {
         "disponibile": e_piu_nuova(versione),
         "versione": versione.lstrip("vV"),
         "note": (release.get("body") or "").strip(),
-        "server": server,
+        "pagina": release.get("html_url"),
         "file": scegli_file(release),
     }
 
@@ -212,7 +178,7 @@ def scarica_e_prepara(aggiornamento, al_progresso=None):
     if not os.access(app_attuale.parent, os.W_OK) or not os.access(app_attuale, os.W_OK):
         raise RuntimeError(
             f"Non ho i permessi per modificare:\n{app_attuale}\n"
-            "Scarica la nuova versione da Gitea e sostituisci l'app a mano.")
+            "Scarica la nuova versione da GitHub e sostituisci l'app a mano.")
 
     asset = aggiornamento.get("file")
     if not asset:
@@ -222,7 +188,7 @@ def scarica_e_prepara(aggiornamento, al_progresso=None):
 
     cartella_temp = Path(tempfile.mkdtemp(prefix="ytd-aggiornamento-"))
     file_zip = cartella_temp / "app.zip"
-    indirizzo = indirizzo_dal_server(asset["browser_download_url"], aggiornamento["server"])
+    indirizzo = asset["browser_download_url"]
 
     # Download dello zip, a pezzi, per mostrare l'avanzamento
     try:
@@ -353,7 +319,7 @@ def aggiorna_codice():
     """git pull + aggiornamento librerie. Restituisce un messaggio da mostrare."""
     if not (CARTELLA_PROGETTO / ".git").exists():
         raise RuntimeError("Questa cartella non e' collegata a git (manca .git).\n"
-                           "Scarica la nuova versione da Gitea.")
+                           "Scarica la nuova versione da GitHub.")
     risultato = subprocess.run(["git", "pull", "--no-rebase", "--no-edit"],
                                cwd=CARTELLA_PROGETTO, capture_output=True, text=True)
     if risultato.returncode != 0:

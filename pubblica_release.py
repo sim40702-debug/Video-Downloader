@@ -23,6 +23,13 @@ import requests
 
 import aggiornamenti as agg
 
+# Server Gitea di casa: prima il .118 (a cavo), poi il .153
+SERVER_GITEA = [
+    "http://192.168.1.118:3000",
+    "http://192.168.1.153:3000",
+]
+REPOSITORY_GITEA = "Simone/Video-Downloader"
+
 CARTELLA = Path(__file__).resolve().parent
 FILE_TOKEN = CARTELLA / ".gitea-token"
 
@@ -40,6 +47,17 @@ def leggi_token():
     return token
 
 
+def trova_server():
+    """Restituisce il primo server Gitea che risponde, oppure None."""
+    for server in SERVER_GITEA:
+        try:
+            requests.get(f"{server}/api/v1/version", timeout=3)
+            return server
+        except requests.RequestException:
+            continue
+    return None
+
+
 def main():
     note = sys.argv[1] if len(sys.argv) > 1 else ""
     versione = agg.VERSIONE
@@ -54,13 +72,13 @@ def main():
     token = leggi_token()
 
     print("Cerco il server Gitea (prima 192.168.1.118, poi 192.168.1.153)...")
-    server = agg.trova_server()
+    server = trova_server()
     if server is None:
         print("Nessun server Gitea risponde. Sei collegato alla rete di casa?")
         sys.exit(1)
     print(f"Uso il server: {server}")
 
-    api = f"{server}/api/v1/repos/{agg.REPOSITORY}"
+    api = f"{server}/api/v1/repos/{REPOSITORY_GITEA}"
     intestazioni = {"Authorization": f"token {token}"}
 
     # 1) Cerco la release di questa versione, se non c'e' la creo

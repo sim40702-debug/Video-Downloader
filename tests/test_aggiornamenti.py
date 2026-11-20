@@ -1,6 +1,6 @@
 """
 Test degli aggiornamenti (aggiornamenti.py).
-Non contattano Gitea: usano dati finti.
+Non contattano GitHub: usano dati finti.
 """
 
 import json
@@ -21,9 +21,9 @@ RELEASE_FINTA = {
     "body": "Novita' di prova",
     "assets": [
         {"name": "Video-Downloader-macOS-apple-silicon.zip", "size": 10,
-         "browser_download_url": "http://localhost:3000/Simone/Video-Downloader/releases/download/v9.9.9/Video-Downloader-macOS-apple-silicon.zip"},
+         "browser_download_url": "https://github.com/sim40702-debug/YouTube-Downloader/releases/download/v9.9.9/Video-Downloader-macOS-apple-silicon.zip"},
         {"name": "Video-Downloader-windows.zip", "size": 10,
-         "browser_download_url": "http://localhost:3000/Simone/Video-Downloader/releases/download/v9.9.9/Video-Downloader-windows.zip"},
+         "browser_download_url": "https://github.com/sim40702-debug/YouTube-Downloader/releases/download/v9.9.9/Video-Downloader-windows.zip"},
     ],
 }
 
@@ -68,11 +68,6 @@ class TestFileGiusto(unittest.TestCase):
         with mock.patch.object(agg, "SU_WINDOWS", True):
             self.assertEqual(agg.tipo_di_sistema(), "windows")
 
-    def test_indirizzo_dal_server(self):
-        link = RELEASE_FINTA["assets"][0]["browser_download_url"]
-        nuovo = agg.indirizzo_dal_server(link, "http://192.168.1.118:3000")
-        self.assertTrue(nuovo.startswith("http://192.168.1.118:3000/Simone/"))
-        self.assertTrue(nuovo.endswith("apple-silicon.zip"))
 
 
 class RispostaFinta:
@@ -89,39 +84,28 @@ class RispostaFinta:
         return False
 
 
-def urlopen_finto(release, server_spento=()):
-    """Simula Gitea: /version risponde solo per i server accesi."""
-    def finto(richiesta, timeout=None, context=None):
-        indirizzo = richiesta.full_url
-        for spento in server_spento:
-            if indirizzo.startswith(spento):
-                raise OSError("server spento")
-        if indirizzo.endswith("/api/v1/version"):
-            return RispostaFinta({"version": "1.22"})
-        return RispostaFinta(release)
-    return finto
-
-
 class TestControllo(unittest.TestCase):
 
-    def test_usa_prima_il_118(self):
-        with mock.patch("urllib.request.urlopen", urlopen_finto(RELEASE_FINTA)):
-            self.assertEqual(agg.trova_server(), "http://192.168.1.118:3000")
+    def test_chiede_a_github(self):
+        indirizzi = []
 
-    def test_se_118_spento_usa_153(self):
-        with mock.patch("urllib.request.urlopen",
-                        urlopen_finto(RELEASE_FINTA, ["http://192.168.1.118"])):
+        def finto(richiesta, timeout=None, context=None):
+            indirizzi.append(richiesta.full_url)
+            return RispostaFinta(RELEASE_FINTA)
+
+        with mock.patch("urllib.request.urlopen", finto):
             risultato = agg.controlla()
-        self.assertEqual(risultato["server"], "http://192.168.1.153:3000")
+        self.assertEqual(indirizzi, [
+            "https://api.github.com/repos/sim40702-debug/YouTube-Downloader/releases/latest"])
         self.assertTrue(risultato["disponibile"])
         self.assertEqual(risultato["versione"], "9.9.9")
 
     def test_gia_aggiornato(self):
         release = dict(RELEASE_FINTA, tag_name=f"v{agg.VERSIONE}")
-        with mock.patch("urllib.request.urlopen", urlopen_finto(release)):
+        with mock.patch("urllib.request.urlopen", return_value=RispostaFinta(release)):
             self.assertFalse(agg.controlla()["disponibile"])
 
-    def test_fuori_casa(self):
+    def test_senza_internet(self):
         with mock.patch("urllib.request.urlopen", side_effect=OSError("offline")):
             with self.assertRaises(RuntimeError):
                 agg.controlla()
