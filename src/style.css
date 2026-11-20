@@ -275,6 +275,10 @@ select:disabled { opacity: 0.6; }
 
 .spazio { flex: 1; min-height: 16px; }
 
+.versione { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.versione .link { padding: 0; }
+.versione .link:disabled { opacity: 0.5; }
+
 /* Avanzamento */
 .avanzamento { margin-bottom: 14px; }
 .riga-avanzamento {

@@ -225,6 +225,7 @@ async fn installa_aggiornamento(app: AppHandle) -> Result<(), String> {
         .ok_or("Nessun aggiornamento disponibile.")?;
 
     let finestra = app.clone();
+    let finestra_fine = app.clone();
     let mut scaricati: u64 = 0;
     aggiornamento
         .download_and_install(
@@ -234,7 +235,10 @@ async fn installa_aggiornamento(app: AppHandle) -> Result<(), String> {
                     let _ = finestra.emit("aggiornamento", scaricati as f64 / totale as f64 * 100.0);
                 }
             },
-            || {},
+            // Download finito: ora lo installa
+            move || {
+                let _ = finestra_fine.emit("aggiornamento-installo", ());
+            },
         )
         .await
         .map_err(|_| "Aggiornamento non riuscito. Riprova più tardi.".to_string())?;

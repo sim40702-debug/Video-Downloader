@@ -320,6 +320,7 @@ function aggiornaPulsanti() {
   elemento("link").disabled = occupato;
   elemento("qualita").disabled = occupato || video === null;
   elemento("pulsante-cartella").disabled = occupato;
+  elemento("pulsante-cerca").disabled = occupato;
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
     pulsante.disabled = occupato;
   }
@@ -330,38 +331,86 @@ function aggiornaPulsanti() {
 
 // ---------- Aggiornamenti dell'app ----------
 
-async function controllaAggiornamento() {
+let versioneAttuale = "";
+let versioneNuova = null; // es. "2.0.1" se c'e' un aggiornamento
+
+// Scrive la riga "Versione" (testo + pulsante a destra)
+function mostraVersione(testo, testoPulsante) {
+  elemento("testo-versione").textContent = testo;
+  const pulsante = elemento("pulsante-cerca");
+  pulsante.hidden = testoPulsante === "";
+  pulsante.textContent = testoPulsante;
+}
+
+// silenzioso = true all'avvio: se non c'e' niente di nuovo non lo dice
+async function controllaAggiornamento(silenzioso) {
+  mostraVersione(versioneAttuale, "Controllo...");
+  elemento("pulsante-cerca").disabled = true;
   try {
     const nuova = await invoke("controlla_aggiornamento");
     if (nuova) {
-      const attuale = await invoke("versione_app");
+      versioneNuova = nuova.versione;
+      mostraVersione(`${versioneAttuale}, è disponibile la ${nuova.versione}`, "Aggiorna");
       elemento("testo-aggiornamento").textContent =
-        `È disponibile la versione ${nuova.versione} (hai la ${attuale}).`;
+        `È disponibile la versione ${nuova.versione} (hai la ${versioneAttuale}).`;
       elemento("barra-aggiornamento").hidden = false;
+    } else {
+      versioneNuova = null;
+      mostraVersione(silenzioso ? versioneAttuale : `${versioneAttuale}, è l'ultima`, "Cerca aggiornamenti");
     }
   } catch (errore) {
-    // Senza Internet non diciamo niente: riproveremo al prossimo avvio
+    // Senza Internet all'avvio non diciamo niente
+    if (silenzioso) {
+      mostraVersione(versioneAttuale, "Cerca aggiornamenti");
+    } else {
+      mostraVersione(`${versioneAttuale}, controllo non riuscito`, "Riprova");
+    }
+  }
+  elemento("pulsante-cerca").disabled = occupato;
+}
+
+// Il pulsante nella riga "Versione"
+function clicVersione() {
+  if (occupato) return;
+  if (versioneNuova) {
+    installaAggiornamento();
+  } else {
+    controllaAggiornamento(false);
   }
 }
 
 async function installaAggiornamento() {
   if (occupato) return;
   occupato = true;
+  elemento("barra-aggiornamento").hidden = true;
+  elemento("zona-avanzamento").hidden = false;
   aggiornaPulsanti();
-  elemento("pulsante-aggiorna").disabled = true;
-  elemento("testo-aggiornamento").textContent = "Scarico l'aggiornamento...";
+  elemento("pulsante-annulla").hidden = true; // l'aggiornamento non si annulla
+  elemento("barra").style.width = "0%";
+  elemento("testo-stato").textContent = "Scarico l'aggiornamento...";
+  elemento("dettagli-avanzamento").textContent = `versione ${versioneNuova}`;
+  mostraVersione(`${versioneAttuale}, aggiorno alla ${versioneNuova}`, "");
+
   try {
     await invoke("installa_aggiornamento"); // alla fine l'app si riavvia da sola
   } catch (errore) {
-    elemento("testo-aggiornamento").textContent = errore;
-    elemento("pulsante-aggiorna").disabled = false;
+    elemento("zona-avanzamento").hidden = true;
+    messaggioPiede(errore, true);
     occupato = false;
     aggiornaPulsanti();
+    mostraVersione(`${versioneAttuale}, aggiornamento non riuscito`, "Aggiorna");
   }
 }
 
 listen("aggiornamento", (evento) => {
-  elemento("testo-aggiornamento").textContent = `Scarico l'aggiornamento: ${Math.round(evento.payload)}%`;
+  const percentuale = evento.payload;
+  elemento("barra").style.width = percentuale + "%";
+  elemento("testo-stato").textContent = `Scarico l'aggiornamento, ${Math.round(percentuale)}%`;
+});
+
+listen("aggiornamento-installo", () => {
+  elemento("barra").style.width = "100%";
+  elemento("testo-stato").textContent = "Installo l'aggiornamento: l'app si riavvia da sola...";
 });
 
 // ---------- Avvio ----------
@@ -374,6 +423,8 @@ function mostraPrincipale() {
 }
 
 async function avvio() {
+  versioneAttuale = await invoke("versione_app");
+  mostraVersione(versioneAttuale, "Cerca aggiornamenti");
   cartella = await invoke("cartella_download");
   mostraCartella();
   piedeIniziale();
@@ -400,6 +451,7 @@ async function avvio() {
   elemento("pulsante-annulla").addEventListener("click", annulla);
   elemento("pulsante-prepara").addEventListener("click", preparaComponenti);
   elemento("pulsante-aggiorna").addEventListener("click", installaAggiornamento);
+  elemento("pulsante-cerca").addEventListener("click", clicVersione);
 
   const mancanti = await invoke("componenti_mancanti");
   if (mancanti.length > 0) {
@@ -408,7 +460,7 @@ async function avvio() {
     mostraPrincipale();
   }
 
-  controllaAggiornamento();
+  controllaAggiornamento(true);
 }
 
 avvio();
