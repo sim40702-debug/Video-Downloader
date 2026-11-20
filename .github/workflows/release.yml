@@ -124,4 +124,4 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Pubblica la release
-        run: gh release edit "v${{ needs.controlla.outputs.versione }}" --draft=false --latest --repo "$GITHUB_REPOSITORY"
+        run: gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ needs.controlla.outputs.id_release }}" -F draft=false -f make_latest=true
