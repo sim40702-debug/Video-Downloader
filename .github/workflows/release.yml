@@ -1,0 +1,76 @@
+# Quando crei un tag di versione (rilascia.sh lo fa da solo), GitHub compila
+# l'app per Mac Apple Silicon, Mac Intel e Windows e crea la release su GitHub.
+# (Gli aggiornamenti dell'app invece usano la release su Gitea di casa.)
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15          # Mac Apple Silicon (M1, M2, M3, M4...)
+          - runner: macos-15-intel    # Mac Intel
+          - runner: windows-latest    # Windows
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Controlla che il tag e la versione nel codice siano uguali
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          CODICE=$(grep '^VERSIONE = ' aggiornamenti.py | cut -d'"' -f2)
+          if [ "$TAG" != "$CODICE" ]; then
+            echo "::error::Il tag e' v$TAG ma in aggiornamenti.py c'e' VERSIONE = \"$CODICE\". Usa ./rilascia.sh $TAG"
+            exit 1
+          fi
+
+      - name: Installa Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepara l'ambiente (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python -m unittest discover -s tests -v
+
+      - name: Prepara l'ambiente (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python -m pip install --upgrade pip
+          .venv\Scripts\python -m pip install -r requirements.txt
+          .venv\Scripts\python -m unittest discover -s tests -v
+
+      - name: Compila (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x build_mac.sh
+          ./build_mac.sh
+
+      - name: Compila (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: call build_windows.bat
+
+      - name: Carica nella release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
