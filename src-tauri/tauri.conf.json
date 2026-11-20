@@ -48,7 +48,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2MUMyRTk3OTM5MTEwNkQKUldSdEVKR1RseTRjSm0zYy8zVDR3NU5iLzROUnRXV3VYZDllY2hkM3VnMEx1bUF1UWdVOFEwQ28K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVGRjQxMkIyMDJCQzMxMDUKUldRRk1id0NzaEwwWDZuTnM1ZXZtTzhjT3JBL3lkNC9IUllUeWlselBFcWNzdUJaeFZaeVR0bFUK",
       "endpoints": [
         "https://github.com/sim40702-debug/YouTube-Downloader/releases/latest/download/latest.json"
       ],
