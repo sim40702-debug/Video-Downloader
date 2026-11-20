@@ -1,21 +1,57 @@
-# Quando crei un tag di versione (rilascia.sh lo fa da solo), GitHub compila
-# l'app per Mac Apple Silicon, Mac Intel e Windows e crea la release su GitHub.
-# (Gli aggiornamenti dell'app invece usano la release su Gitea di casa.)
+# Release automatica su GitHub.
+#
+# A ogni push su main questo script guarda la versione scritta in
+# aggiornamenti.py (VERSIONE = "1.0.1").
+#  - Se su GitHub la release v1.0.1 NON esiste ancora: compila l'app per
+#    Mac Apple Silicon, Mac Intel e Windows e crea la release da solo.
+#  - Se esiste gia': non fa niente.
+#
+# Quindi per fare una release basta cambiare il numero di versione
+# (lo fa ./rilascia.sh) e fare push.
+# Si puo' anche avviare a mano dalla scheda Actions ("Run workflow").
 
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  # 1) C'e' una versione nuova?
+  controlla:
+    runs-on: ubuntu-latest
+    outputs:
+      versione: ${{ steps.versione.outputs.versione }}
+      nuova: ${{ steps.versione.outputs.nuova }}
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Leggi la versione e controlla se la release esiste
+        id: versione
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSIONE=$(grep '^VERSIONE = ' aggiornamenti.py | cut -d'"' -f2)
+          echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSIONE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La release v$VERSIONE esiste gia': niente da fare."
+            echo "nuova=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nuova versione v$VERSIONE: la compilo e creo la release."
+            echo "nuova=si" >> "$GITHUB_OUTPUT"
+          fi
+
+  # 2) Compilazione sui tre sistemi
+  compila:
+    needs: controlla
+    if: needs.controlla.outputs.nuova == 'si'
     strategy:
-      fail-fast: false   # se una compilazione fallisce, le altre continuano
       fail-fast: false   # se una compilazione fallisce, le altre continuano
       matrix:
         include:
@@ -28,22 +64,12 @@ jobs:
       - name: Scarica il codice
         uses: actions/checkout@v4
 
-      - name: Controlla che il tag e la versione nel codice siano uguali
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          CODICE=$(grep '^VERSIONE = ' aggiornamenti.py | cut -d'"' -f2)
-          if [ "$TAG" != "$CODICE" ]; then
-            echo "::error::Il tag e' v$TAG ma in aggiornamenti.py c'e' VERSIONE = \"$CODICE\". Usa ./rilascia.sh $TAG"
-            exit 1
-          fi
-
       - name: Installa Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Prepara l'ambiente (Mac)
+      - name: Prepara e testa (Mac)
         if: runner.os == 'macOS'
         run: |
           python -m venv .venv
@@ -51,7 +77,7 @@ jobs:
           .venv/bin/python -m pip install -r requirements.txt
           .venv/bin/python -m unittest discover -s tests -v
 
-      - name: Prepara l'ambiente (Windows)
+      - name: Prepara e testa (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
@@ -71,8 +97,30 @@ jobs:
         shell: cmd
         run: call build_windows.bat
 
-      - name: Carica nella release
+      - name: Conserva lo zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.runner }}
+          path: dist/*.zip
+
+  # 3) Una sola release con tutti gli zip
+  release:
+    needs: [controlla, compila]
+    if: ${{ !cancelled() && needs.controlla.outputs.nuova == 'si' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prendi gli zip compilati
+        uses: actions/download-artifact@v4
+        with:
+          path: zip
+          merge-multiple: true
+
+      - name: Crea la release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.zip
+          tag_name: v${{ needs.controlla.outputs.versione }}
+          name: Video Downloader ${{ needs.controlla.outputs.versione }}
+          target_commitish: ${{ github.sha }}
+          files: zip/*.zip
+          fail_on_unmatched_files: true
           generate_release_notes: true

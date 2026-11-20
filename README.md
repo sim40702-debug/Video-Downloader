@@ -123,7 +123,12 @@ Su un Mac Intel l'aggiornamento automatico funziona solo se nella release c'è l
 
 ## 8. Release su GitHub (automatica)
 
-Quando `rilascia.sh` manda il tag su GitHub, la GitHub Action (`.github/workflows/release.yml`) compila l'app per **Mac Apple Silicon, Mac Intel e Windows** e crea anche una release su GitHub. Controlla anche che il tag e la versione nel codice siano uguali.
+Non serve fare niente a mano: a ogni push su `main` la GitHub Action (`.github/workflows/release.yml`) legge `VERSIONE` in `aggiornamenti.py`.
+
+- Se su GitHub **non esiste ancora** la release con quel numero, compila l'app per **Mac Apple Silicon, Mac Intel e Windows** e crea la release da sola (circa 15 minuti, la segui nella scheda **Actions**).
+- Se esiste già, non fa niente.
+
+Quindi per una nuova versione su GitHub basta cambiare il numero (lo fa `./rilascia.sh 1.0.1`) e fare push. Si può anche avviare a mano: scheda **Actions** → **Release** → **Run workflow**.
 
 ---
 
