@@ -110,7 +110,7 @@ Per scegliere tu il numero: `npm run rilascia 2.1.0`
 Gli aggiornamenti sono firmati: così l'app installa solo versioni create da te. Serve un segreto su GitHub:
 
 ```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY --repo sim40702-debug/YouTube-Downloader < video-downloader.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY --repo sim40702-debug/Video-Downloader < video-downloader.key
 ```
 
 Il file `video-downloader.key` tienilo al sicuro (per esempio in `~/.tauri/`) e **non metterlo mai nel repository**: chi ce l'ha potrebbe firmare aggiornamenti al posto tuo. Se lo perdi, le app già installate non potranno più aggiornarsi da sole.
