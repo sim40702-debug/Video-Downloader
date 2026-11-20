@@ -42,12 +42,19 @@ jobs:
         run: |
           VERSIONE=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
-          if [ "$(gh release view "v$VERSIONE" --json isDraft -q .isDraft 2>/dev/null)" = "false" ]; then
-            echo "La release v$VERSIONE esiste gia': niente da fare."
-            echo "nuova=no" >> "$GITHUB_OUTPUT"
-          else
+          # "manca" = non c'e', "bozza" = tentativo fallito, un numero = quanti file contiene
+          STATO=$(gh release view "v$VERSIONE" --json isDraft,assets -q 'if .isDraft then "bozza" else (.assets | length | tostring) end' 2>/dev/null || echo "manca")
+          if [ "$STATO" = "0" ]; then
+            echo "La release v$VERSIONE e' vuota: la tolgo e la rifaccio."
+            gh release delete "v$VERSIONE" --yes
+            STATO="manca"
+          fi
+          if [ "$STATO" = "manca" ] || [ "$STATO" = "bozza" ]; then
             echo "Nuova versione v$VERSIONE: la compilo."
             echo "nuova=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "La release v$VERSIONE esiste gia' con $STATO file: niente da fare."
+            echo "nuova=no" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Crea la release (nascosta finche' non e' pronta)
