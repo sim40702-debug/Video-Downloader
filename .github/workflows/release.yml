@@ -7,7 +7,7 @@
 #  - Se esiste gia': non fa niente.
 #
 # Quindi per fare una release basta cambiare il numero di versione
-# (lo fa ./rilascia.sh) e fare push.
+# e fare push: lo fa "npm run rilascia git".
 # Si puo' anche avviare a mano dalla scheda Actions ("Run workflow").
 
 name: Release

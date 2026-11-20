@@ -84,31 +84,31 @@ Copia la cartella `dist\Video Downloader` in `%LOCALAPPDATA%\Programs\` e crea u
 2. Crea un token: **Impostazioni → Applicazioni → Genera token**, permesso *repository: lettura e scrittura*.
 3. Salva il token nel file **`.gitea-token`** nella cartella del progetto (sia sul Mac sia sul PC Windows). Git lo ignora: non finisce mai su GitHub.
 
-La prima volta che `rilascia.sh` manda il codice a Gitea, git ti chiede utente e password: usa **Simone** e come password il **token**. Il Mac lo ricorda nel Portachiavi.
+La prima volta che il codice viene mandato a Gitea, git ti chiede utente e password: usa **Simone** e come password il **token**. Il Mac lo ricorda nel Portachiavi.
+
+Serve anche **Node.js** (per i comandi `npm run`).
 
 ## 6. Pubblicare una nuova versione
 
-Il codice sta su **GitHub**; le versioni compilate vanno su **Gitea**.
+Il codice sta su **GitHub**; le versioni compilate vanno anche su **Gitea**.
 
-**Sul Mac:**
+**1. Nuova versione su GitHub** (dal Mac):
 
 ```bash
-./rilascia.sh 1.0.1 "Cosa c'è di nuovo"
+npm run rilascia git
 ```
 
-Fa tutto da solo: `git pull`, scrive la versione in `aggiornamenti.py`, commit e push su GitHub, crea il tag, manda codice e tag su Gitea (prima il .118, poi il .153), compila l'app per Mac e carica lo zip nella release su Gitea.
+Aumenta la versione da sola (es. 1.0.0 → 1.0.1), fa commit, push e tag. Poi GitHub compila Mac e Windows e crea la release da solo. Per scegliere tu il numero: `npm run rilascia git 1.2.0`.
 
-**Poi sul PC Windows:**
+**2. Su Gitea** (sul Mac, e poi anche sul PC Windows):
 
+```bash
+npm run rilascia
 ```
-rilascia.bat
-```
 
-Fa `git pull`, compila la versione Windows e la aggiunge alla stessa release su Gitea.
+Scarica le ultime modifiche, manda codice e tag su Gitea (prima il .118, poi il .153), compila l'app per **quel** computer e carica lo zip nella release su Gitea. Sul Mac carica la versione Mac, sul PC quella Windows.
 
-Per ricompilare e ricaricare la versione attuale senza cambiare numero: `./rilascia.sh` (senza versione).
-
-Per la **prima release** (versione 1.0.0, già scritta nel codice): esegui `./rilascia.sh` senza versione. Crea il tag v1.0.0, manda codice e tag su GitHub e su Gitea, compila e carica.
+Se lo lanci di nuovo senza cambiare versione, ricompila e **sostituisce** lo zip su Gitea.
 
 ## 7. Come funzionano gli aggiornamenti
 
@@ -128,7 +128,7 @@ Non serve fare niente a mano: a ogni push su `main` la GitHub Action (`.github/w
 - Se su GitHub **non esiste ancora** la release con quel numero, compila l'app per **Mac Apple Silicon, Mac Intel e Windows** e crea la release da sola (circa 15 minuti, la segui nella scheda **Actions**).
 - Se esiste già, non fa niente.
 
-Quindi per una nuova versione su GitHub basta cambiare il numero (lo fa `./rilascia.sh 1.0.1`) e fare push. Si può anche avviare a mano: scheda **Actions** → **Release** → **Run workflow**.
+Quindi per una nuova versione su GitHub basta `npm run rilascia git`. Si può anche avviare a mano: scheda **Actions** → **Release** → **Run workflow**.
 
 ---
 
@@ -158,7 +158,7 @@ Video-Downloader/
 ├── requirements.txt                  librerie Python
 ├── install.sh / install_windows.bat  installazione automatica
 ├── build_mac.sh / build_windows.bat  compilazione dell'app
-├── rilascia.sh / rilascia.bat        pubblicazione di una nuova versione
+├── rilascia.js + package.json        npm run rilascia (Gitea) / npm run rilascia git (GitHub)
 ├── Avvia Video Downloader.command  avvio con doppio clic (Mac)
 ├── Avvia Video Downloader.bat      avvio con doppio clic (Windows)
 ├── tests/                            test automatici

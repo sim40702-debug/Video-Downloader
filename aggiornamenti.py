@@ -12,7 +12,7 @@ Come funziona:
      questo computer, chiude l'app, sostituisce la vecchia e la riapre;
    - da codice (main.py) -> fa "git pull" e aggiorna le librerie.
 
-VERSIONE la cambia lo script rilascia.sh: non serve toccarla a mano.
+VERSIONE la cambia "npm run rilascia git": non serve toccarla a mano.
 Il repository su Gitea deve essere PUBBLICO, cosi' l'app legge le release
 senza token.
 """
@@ -37,7 +37,7 @@ except ImportError:
     certifi = None
 
 
-VERSIONE = "1.0.2"
+VERSIONE = "1.0.0"
 
 # Server Gitea di casa: il primo e' quello preferito (collegato a cavo)
 SERVER_GITEA = [

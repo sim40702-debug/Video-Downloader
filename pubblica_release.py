@@ -2,7 +2,7 @@
 pubblica_release.py
 -------------------
 Carica lo zip compilato (dist/...) nella release su Gitea.
-Lo usano rilascia.sh (Mac) e rilascia.bat (Windows): di solito
+Lo usa rilascia.js (npm run rilascia): di solito
 non serve avviarlo a mano.
 
 Uso: python pubblica_release.py ["note della versione"]

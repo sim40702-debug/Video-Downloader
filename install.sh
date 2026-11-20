@@ -118,7 +118,7 @@ else
 fi
 
 # 7) Permessi di esecuzione e rimozione del blocco di macOS (Gatekeeper)
-chmod +x install.sh build_mac.sh rilascia.sh "Avvia Video Downloader.command" 2>/dev/null || true
+chmod +x install.sh build_mac.sh "Avvia Video Downloader.command" 2>/dev/null || true
 xattr -dr com.apple.quarantine . 2>/dev/null || true
 ok "Permessi sistemati"
 

@@ -42,7 +42,7 @@ class TestVersioni(unittest.TestCase):
         self.assertFalse(agg.e_piu_nuova("0.9.0", "1.0.0"))
 
     def test_versione_scritta_bene(self):
-        # rilascia.sh e release.yml leggono questa riga: deve avere questo formato
+        # rilascia.js e release.yml leggono questa riga: deve avere questo formato
         testo = Path(agg.__file__).read_text(encoding="utf-8")
         self.assertIn(f'\nVERSIONE = "{agg.VERSIONE}"\n', testo)
 
