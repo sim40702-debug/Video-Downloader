@@ -16,6 +16,7 @@ jobs:
   build:
     strategy:
       fail-fast: false   # se una compilazione fallisce, le altre continuano
+      fail-fast: false   # se una compilazione fallisce, le altre continuano
       matrix:
         include:
           - runner: macos-15          # Mac Apple Silicon (M1, M2, M3, M4...)
