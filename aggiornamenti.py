@@ -37,7 +37,7 @@ except ImportError:
     certifi = None
 
 
-VERSIONE = "1.0.0"
+VERSIONE = "1.0.2"
 
 # Server Gitea di casa: il primo e' quello preferito (collegato a cavo)
 SERVER_GITEA = [
