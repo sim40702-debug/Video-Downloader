@@ -275,6 +275,86 @@ select:disabled { opacity: 0.6; }
 
 .spazio { flex: 1; min-height: 16px; }
 
+/* ---------- Elenco dei download ---------- */
+.coda {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+/* Con l'elenco visibile, e' lui a occupare lo spazio libero */
+.coda:not([hidden]) + .spazio { flex: 0; min-height: 12px; }
+
+.intestazione-coda {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 4px 6px;
+}
+.intestazione-coda h2 { font-size: 12.5px; font-weight: 600; color: var(--testo-secondario); }
+.intestazione-coda .link { font-size: 12.5px; padding: 0; }
+
+.elenco-coda {
+  list-style: none;
+  background: var(--elenco);
+  border: 1px solid var(--linea);
+  border-radius: 11px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.voce {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--linea-interna);
+}
+.voce:first-child { border-top: none; }
+
+.mini {
+  width: 56px;
+  height: 32px;
+  flex: none;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--copertina-vuota);
+}
+
+.testi-voce { flex: 1; min-width: 0; }
+.titolo-voce {
+  font-size: 13px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stato-voce {
+  font-size: 11.5px;
+  color: var(--testo-secondario);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stato-voce.errore { color: var(--rosso); white-space: normal; }
+.voce .traccia { height: 4px; border-radius: 2px; margin-top: 5px; }
+
+/* Pulsante tondo a destra (ferma, togli, mostra nel Finder) */
+.tondo {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--segmenti-fondo);
+  color: var(--testo-secondario);
+}
+.tondo:active { background: var(--linea); }
+
 .versione { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .versione .link { padding: 0; }
 .versione .link:disabled { opacity: 0.5; }

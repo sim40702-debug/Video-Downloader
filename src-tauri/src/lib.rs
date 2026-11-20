@@ -16,6 +16,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 
 /// Stato dell'app: il download in corso (per poterlo annullare)
@@ -190,6 +191,18 @@ fn mostra_file(percorso: String) {
     }
 }
 
+/// Controlla che una cartella esista ancora (es. quella salvata l'ultima volta)
+#[tauri::command]
+fn esiste_cartella(percorso: String) -> bool {
+    PathBuf::from(percorso).is_dir()
+}
+
+/// Mostra l'avviso del sistema (Centro notifiche su Mac, notifiche su Windows)
+#[tauri::command]
+fn notifica(app: AppHandle, titolo: String, testo: String) {
+    let _ = app.notification().builder().title(titolo).body(testo).show();
+}
+
 // ---------------- aggiornamenti dell'app ----------------
 
 #[derive(Serialize)]
@@ -256,9 +269,17 @@ pub fn avvia() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(Stato {
             processo: Arc::new(Mutex::new(None)),
             annullato: Arc::new(AtomicBool::new(false)),
+        })
+        // Se chiudi la finestra durante un download, fermiamo yt-dlp
+        .on_window_event(|finestra, evento| {
+            if let tauri::WindowEvent::Destroyed = evento {
+                let stato = finestra.state::<Stato>();
+                ytdlp::annulla(&stato.processo, &stato.annullato);
+            }
         })
         .invoke_handler(tauri::generate_handler![
             componenti_mancanti,
@@ -270,6 +291,8 @@ pub fn avvia() {
             cartella_download,
             scegli_cartella,
             mostra_file,
+            esiste_cartella,
+            notifica,
             controlla_aggiornamento,
             installa_aggiornamento,
             versione_app,

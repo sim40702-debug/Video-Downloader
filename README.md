@@ -13,8 +13,11 @@ Fatta con **Tauri**: la grafica è in HTML, CSS e JavaScript, la parte che lavor
 - Incolli il link (se il campo è vuoto parte da solo) e vedi copertina, titolo, canale, durata e visualizzazioni.
 - Scegli **Video** (MP4, fino al 4K) oppure **Audio** (MP3 da 128 a 320 kbps), con la dimensione stimata del file.
 - Scegli la cartella (di base `Download`).
-- **Scarica**: vedi percentuale, MB scaricati, velocità e tempo rimasto.
-- **Annulla** in ogni momento: i file a metà vengono cancellati.
+- **Scarica**: il video va nell'elenco **Download**, con percentuale, MB scaricati, velocità e tempo rimasto.
+- **Più download insieme**: mentre uno scarica puoi analizzare altri link e premere **Aggiungi ai download**; vengono scaricati uno dopo l'altro. Se incolli più link in una volta, finiscono tutti nell'elenco con il formato e la qualità scelti.
+- Il pulsante tondo a destra di ogni download lo **ferma** (i file a metà vengono cancellati) o, quando è finito, lo **mostra nel Finder**. **Togli i completati** pulisce l'elenco.
+- Se stai usando un'altra app, a fine download arriva la **notifica** del sistema.
+- L'app **ricorda la cartella** e il formato (Video o Audio) scelti l'ultima volta.
 - Se il file esiste già non lo sovrascrive: crea `Titolo (2).mp4`.
 - Grafica chiara o scura, segue da sola il sistema.
 - Quando esce una versione nuova compare un avviso in alto: **Aggiorna**, e l'app si aggiorna e si riavvia.

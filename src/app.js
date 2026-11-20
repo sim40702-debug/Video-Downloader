@@ -18,8 +18,14 @@ function elemento(id) {
 let video = null;              // informazioni del video analizzato
 let modalita = "video";        // "video" oppure "audio"
 let cartella = "";             // dove salvare
-let occupato = false;          // true durante analisi o download
-let ultimoFile = null;         // ultimo file scaricato
+let analizzando = false;       // true mentre legge un link
+let aggiornando = false;       // true mentre installa un aggiornamento
+
+// La coda dei download
+let coda = [];                 // elenco delle voci (vedi aggiungiAllaCoda)
+let voceCorrente = null;       // la voce che sta scaricando adesso
+let codaAttiva = false;        // true finche' ci sono download da fare
+let prossimoNumero = 1;        // per dare un numero unico a ogni voce
 
 const suMac = navigator.userAgent.includes("Mac");
 const nomeEsplora = suMac ? "Mostra nel Finder" : "Mostra in Esplora file";
@@ -91,7 +97,26 @@ function messaggioPiede(testo, errore = false) {
 }
 
 function piedeIniziale() {
-  messaggioPiede(`Il file andrà nella cartella ${nomeCartella(cartella)}.`);
+  messaggioPiede(`I file andranno nella cartella ${nomeCartella(cartella)}.`);
+}
+
+// ---------- Impostazioni ricordate ----------
+// Restano salvate anche quando chiudi l'app (localStorage)
+
+function salvaImpostazione(nome, valore) {
+  try {
+    localStorage.setItem(nome, valore);
+  } catch (errore) {
+    // se non si puo' salvare, pazienza: l'app funziona lo stesso
+  }
+}
+
+function leggiImpostazione(nome) {
+  try {
+    return localStorage.getItem(nome);
+  } catch (errore) {
+    return null;
+  }
 }
 
 // ---------- Primo avvio: componenti ----------
@@ -125,13 +150,13 @@ listen("componenti", (evento) => {
 
 async function analizza() {
   const link = elemento("link").value.trim();
-  if (occupato) return;
+  if (analizzando || aggiornando) return;
   if (link === "") {
     messaggioLink("Incolla prima il link di un video.", true);
     return;
   }
 
-  occupato = true;
+  analizzando = true;
   aggiornaPulsanti();
   messaggioLink("Leggo le informazioni del video...");
 
@@ -139,13 +164,12 @@ async function analizza() {
     video = await invoke("analizza", { url: link });
     mostraVideo();
     messaggioLink("");
-    piedeIniziale();
   } catch (errore) {
     video = null;
     mostraVideo();
     messaggioLink(errore, true);
   }
-  occupato = false;
+  analizzando = false;
   aggiornaPulsanti();
 }
 
@@ -207,8 +231,9 @@ function riempiQualita() {
 // ---------- Video / Audio ----------
 
 function scegliModalita(nuova) {
-  if (occupato) return;
+  if (aggiornando) return;
   modalita = nuova;
+  salvaImpostazione("modalita", nuova);
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
     pulsante.setAttribute("aria-checked", pulsante.dataset.modalita === nuova ? "true" : "false");
   }
@@ -219,10 +244,11 @@ function scegliModalita(nuova) {
 // ---------- Cartella ----------
 
 async function cambiaCartella() {
-  if (occupato) return;
+  if (aggiornando) return;
   const scelta = await invoke("scegli_cartella", { attuale: cartella });
   if (scelta) {
     cartella = scelta;
+    salvaImpostazione("cartella", scelta);
     mostraCartella();
     piedeIniziale();
   }
@@ -233,106 +259,321 @@ function mostraCartella() {
   elemento("pulsante-cartella").title = cartella;
 }
 
-// ---------- Download ----------
+// ---------- Coda dei download ----------
 
-async function scarica() {
-  if (occupato || video === null) return;
-
-  occupato = true;
-  ultimoFile = null;
-  elemento("zona-avanzamento").hidden = false;
-  aggiornaPulsanti();
-  elemento("barra").style.width = "0%";
-  elemento("testo-stato").textContent = "Avvio il download...";
-  elemento("dettagli-avanzamento").textContent = "";
-  messaggioPiede(`Il file andrà nella cartella ${nomeCartella(cartella)}.`);
-
-  try {
-    ultimoFile = await invoke("scarica", {
-      url: video.url,
-      titolo: video.titolo,
-      modalita: modalita,
-      qualita: Number(elemento("qualita").value),
-      cartella: cartella,
-    });
-    elemento("barra").style.width = "100%";
-    elemento("testo-stato").textContent = "Scaricato";
-    elemento("dettagli-avanzamento").textContent = "";
-    mostraFileScaricato();
-  } catch (errore) {
-    elemento("zona-avanzamento").hidden = true;
-    if (errore === "annullato") {
-      messaggioPiede("Download annullato. I file a metà sono stati cancellati.");
-    } else {
-      messaggioPiede(errore, true);
-    }
+// Mette un download nella coda e, se non sta gia' scaricando, parte
+function aggiungiAllaCoda(dati) {
+  const giaPresente = coda.find(
+    (v) => v.url === dati.url && v.modalita === dati.modalita &&
+      (v.stato === "attesa" || v.stato === "analisi" || v.stato === "download")
+  );
+  if (giaPresente) {
+    messaggioLink("Questo video è già nell'elenco dei download.", true);
+    return false;
   }
-  occupato = false;
+
+  const voce = {
+    id: prossimoNumero,
+    url: dati.url,
+    titolo: dati.titolo,
+    copertina: dati.copertina || "",
+    analizzato: dati.analizzato,
+    modalita: dati.modalita,
+    qualita: dati.qualita,
+    cartella: cartella,
+    stato: "attesa",        // attesa, analisi, download, fatto, errore, annullato
+    testo: "In coda",
+    percentuale: 0,
+    file: null,
+    annullata: false,
+  };
+  prossimoNumero++;
+  coda.push(voce);
+  creaVoce(voce);
+  avviaCoda();
+  return true;
+}
+
+// Prende le voci "in coda" una alla volta e le scarica
+async function avviaCoda() {
+  if (codaAttiva) return;
+  codaAttiva = true;
+  aggiornaPulsanti();
+
+  let voce = coda.find((v) => v.stato === "attesa");
+  while (voce) {
+    await scaricaVoce(voce);
+    voce = coda.find((v) => v.stato === "attesa");
+  }
+
+  codaAttiva = false;
   aggiornaPulsanti();
 }
 
-function mostraFileScaricato() {
-  const p = elemento("piede-testo");
-  const nome = nomeCartella(ultimoFile);
-  p.classList.remove("errore");
-  p.classList.add("secondario");
-  p.textContent = `${nome} `;
-  const link = document.createElement("button");
-  link.className = "link";
-  link.textContent = nomeEsplora;
-  link.onclick = () => invoke("mostra_file", { percorso: ultimoFile });
-  p.appendChild(link);
+async function scaricaVoce(voce) {
+  voceCorrente = voce;
+  try {
+    // I link incollati in gruppo non sono ancora stati analizzati
+    if (!voce.analizzato) {
+      cambiaStato(voce, "analisi", "Leggo le informazioni...");
+      const info = await invoke("analizza", { url: voce.url });
+      voce.url = info.url;
+      voce.titolo = info.titolo;
+      voce.copertina = info.copertina;
+      voce.analizzato = true;
+      mostraCopertinaVoce(voce);
+    }
+    if (voce.annullata) throw "annullato";
+
+    cambiaStato(voce, "download", "Avvio il download...");
+    voce.elementi.riga.scrollIntoView({ block: "nearest" }); // resta in vista
+    voce.file = await invoke("scarica", {
+      url: voce.url,
+      titolo: voce.titolo,
+      modalita: voce.modalita,
+      qualita: voce.qualita,
+      cartella: voce.cartella,
+    });
+    voce.percentuale = 100;
+    cambiaStato(voce, "fatto", `Scaricato in ${nomeCartella(voce.cartella)}`);
+    avvisaSeInSottofondo("Scaricato", voce.titolo);
+  } catch (errore) {
+    if (errore === "annullato" || voce.annullata) {
+      cambiaStato(voce, "annullato", "Annullato");
+    } else {
+      cambiaStato(voce, "errore", errore);
+      avvisaSeInSottofondo("Download non riuscito", voce.titolo);
+    }
+  }
+  voceCorrente = null;
+}
+
+// Notifica del sistema, solo se stai usando un'altra app
+function avvisaSeInSottofondo(titolo, testo) {
+  if (!document.hasFocus()) {
+    invoke("notifica", { titolo: titolo, testo: testo });
+  }
+}
+
+// Il pulsante tondo a destra di ogni voce
+function clicPulsanteVoce(voce) {
+  if (voce.stato === "fatto") {
+    invoke("mostra_file", { percorso: voce.file });
+  } else if (voce.stato === "attesa") {
+    togliVoce(voce);
+  } else if (voce.stato === "analisi" || voce.stato === "download") {
+    voce.annullata = true;
+    voce.elementi.pulsante.disabled = true;
+    cambiaStato(voce, voce.stato, "Annullo...");
+    if (voce.stato === "download") invoke("annulla");
+  } else {
+    togliVoce(voce); // errore o annullato
+  }
+}
+
+function togliVoce(voce) {
+  coda = coda.filter((v) => v !== voce);
+  voce.elementi.riga.remove();
+  aggiornaElenco();
+}
+
+function togliCompletati() {
+  for (const voce of [...coda]) {
+    if (voce.stato === "fatto" || voce.stato === "errore" || voce.stato === "annullato") {
+      togliVoce(voce);
+    }
+  }
+}
+
+// ---------- Disegno dell'elenco ----------
+
+const iconaFerma =
+  '<svg width="8" height="8" viewBox="0 0 8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 1l6 6M7 1L1 7"/></svg>';
+const iconaMostra =
+  '<svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="5" r="3.6"/><path d="M7.7 7.7L11 11"/></svg>';
+
+// Crea la riga di una voce nell'elenco
+function creaVoce(voce) {
+  const riga = document.createElement("li");
+  riga.className = "voce";
+
+  const mini = document.createElement("img");
+  mini.className = "mini";
+  mini.alt = "";
+
+  const testi = document.createElement("div");
+  testi.className = "testi-voce";
+  const titolo = document.createElement("div");
+  titolo.className = "titolo-voce";
+  const traccia = document.createElement("div");
+  traccia.className = "traccia";
+  const barra = document.createElement("i");
+  traccia.appendChild(barra);
+  const stato = document.createElement("div");
+  stato.className = "stato-voce";
+  testi.append(titolo, traccia, stato);
+
+  const pulsante = document.createElement("button");
+  pulsante.type = "button";
+  pulsante.className = "tondo";
+  pulsante.addEventListener("click", () => clicPulsanteVoce(voce));
+
+  riga.append(mini, testi, pulsante);
+  elemento("elenco-coda").appendChild(riga);
+
+  voce.elementi = { riga, mini, titolo, traccia, barra, stato, pulsante };
+  mostraCopertinaVoce(voce);
+  disegnaVoce(voce);
+  aggiornaElenco();
+}
+
+// Immagine trasparente: si vede il riquadro grigio finche' non c'e' la copertina
+const immagineVuota = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+function mostraCopertinaVoce(voce) {
+  const mini = voce.elementi.mini;
+  mini.src = immagineVuota;
+  if (voce.copertina) {
+    mini.src = voce.copertina;
+    mini.style.visibility = "visible";
+    mini.onerror = () => (mini.style.visibility = "hidden");
+  }
+  voce.elementi.titolo.textContent = voce.titolo;
+}
+
+function cambiaStato(voce, stato, testo) {
+  voce.stato = stato;
+  voce.testo = testo;
+  disegnaVoce(voce);
+  aggiornaElenco();
+}
+
+// Aggiorna testi, barra e pulsante di una voce
+function disegnaVoce(voce) {
+  const e = voce.elementi;
+  e.titolo.textContent = voce.titolo;
+  e.stato.textContent = voce.testo;
+  e.stato.classList.toggle("errore", voce.stato === "errore");
+  e.traccia.hidden = voce.stato !== "download";
+  e.barra.style.width = voce.percentuale + "%";
+
+  if (voce.stato === "fatto") {
+    e.pulsante.innerHTML = iconaMostra;
+    e.pulsante.title = nomeEsplora;
+    e.pulsante.disabled = false;
+  } else {
+    e.pulsante.innerHTML = iconaFerma;
+    if (voce.stato === "attesa") e.pulsante.title = "Togli dall'elenco";
+    else if (voce.stato === "errore" || voce.stato === "annullato") e.pulsante.title = "Togli dall'elenco";
+    else e.pulsante.title = "Ferma";
+    if (voce.stato !== "analisi" && voce.stato !== "download") e.pulsante.disabled = false;
+  }
+}
+
+// Mostra o nasconde l'elenco e il link "Togli i completati"
+function aggiornaElenco() {
+  elemento("coda").hidden = coda.length === 0;
+  const finiti = coda.some((v) => v.stato === "fatto" || v.stato === "errore" || v.stato === "annullato");
+  elemento("pulsante-pulisci").hidden = !finiti;
 }
 
 listen("progresso", (evento) => {
+  const voce = voceCorrente;
+  if (voce === null || voce.annullata) return;
   const p = evento.payload;
-  elemento("barra").style.width = p.percentuale + "%";
+  voce.percentuale = p.percentuale;
 
   let cosa = "Scarico il file";
   if (p.parte === "video") cosa = "Scarico il video";
-  if (p.parte === "audio") cosa = modalita === "audio" ? "Scarico l'audio" : "Scarico l'audio del video";
-  elemento("testo-stato").textContent = `${cosa}, ${Math.round(p.percentuale)}%`;
+  if (p.parte === "audio") cosa = voce.modalita === "audio" ? "Scarico l'audio" : "Scarico l'audio del video";
 
-  const dettagli = [];
-  if (p.totale) dettagli.push(`${formattaByte(p.scaricati)} di ${formattaByte(p.totale)}`);
-  if (p.velocita) dettagli.push(`${formattaByte(p.velocita)}/s`);
-  if (p.rimasto != null) dettagli.push(`ancora ${formattaDurata(p.rimasto)}`);
-  elemento("dettagli-avanzamento").textContent = dettagli.join(", ");
+  const pezzi = [`${cosa}, ${Math.round(p.percentuale)}%`];
+  if (p.totale) pezzi.push(`${formattaByte(p.scaricati)} di ${formattaByte(p.totale)}`);
+  if (p.velocita) pezzi.push(`${formattaByte(p.velocita)}/s`);
+  if (p.rimasto != null) pezzi.push(`ancora ${formattaDurata(p.rimasto)}`);
+  cambiaStato(voce, "download", pezzi.join(", "));
 });
 
 listen("conversione", (evento) => {
-  elemento("testo-stato").textContent = evento.payload;
-  elemento("dettagli-avanzamento").textContent = "";
+  const voce = voceCorrente;
+  if (voce === null || voce.annullata) return;
+  voce.percentuale = 100;
+  cambiaStato(voce, "download", evento.payload);
 });
 
-function annulla() {
-  invoke("annulla");
-  elemento("pulsante-annulla").disabled = true;
-  elemento("testo-stato").textContent = "Annullo...";
+// ---------- Pulsante principale ----------
+
+function scarica() {
+  if (video === null || aggiornando) return;
+  const aggiunto = aggiungiAllaCoda({
+    url: video.url,
+    titolo: video.titolo,
+    copertina: video.copertina,
+    analizzato: true,
+    modalita: modalita,
+    qualita: Number(elemento("qualita").value),
+  });
+  if (aggiunto) {
+    // Pronto per il prossimo link
+    video = null;
+    mostraVideo();
+    elemento("link").value = "";
+    messaggioLink("");
+    elemento("link").focus();
+    aggiornaPulsanti();
+  }
+}
+
+// Se incolli piu' link insieme, li mette tutti nella coda
+function linkNelTesto(testo) {
+  const trovati = testo.match(/(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\/[^\s,;]+/g);
+  return trovati || [];
+}
+
+function incollaPiuLink(link) {
+  // Senza analisi non conosciamo le qualita': usiamo la scelta attuale o quella consigliata
+  let qualita = Number(elemento("qualita").value);
+  if (!qualita) qualita = modalita === "audio" ? 192 : 1080;
+  let aggiunti = 0;
+  for (const url of link) {
+    const ok = aggiungiAllaCoda({
+      url: url,
+      titolo: url.replace(/^https?:\/\/(www\.)?/, ""), // finche' non sappiamo il titolo vero
+      analizzato: false,
+      modalita: modalita,
+      qualita: qualita,
+    });
+    if (ok) aggiunti++;
+  }
+  const cosa = modalita === "audio" ? "MP3" : "video";
+  messaggioLink(`Aggiunti ${aggiunti} link all'elenco dei download (${cosa}).`);
 }
 
 // ---------- Pulsanti attivi o no ----------
 
 function aggiornaPulsanti() {
-  elemento("pulsante-scarica").textContent = modalita === "audio" ? "Scarica audio" : "Scarica video";
-  elemento("pulsante-scarica").disabled = occupato || video === null;
-  elemento("pulsante-analizza").disabled = occupato;
-  elemento("link").disabled = occupato;
-  elemento("qualita").disabled = occupato || video === null;
-  elemento("pulsante-cartella").disabled = occupato;
-  elemento("pulsante-cerca").disabled = occupato;
-  for (const pulsante of document.querySelectorAll(".segmenti button")) {
-    pulsante.disabled = occupato;
+  const scarica = elemento("pulsante-scarica");
+  if (codaAttiva) {
+    scarica.textContent = "Aggiungi ai download";
+  } else {
+    scarica.textContent = modalita === "audio" ? "Scarica audio" : "Scarica video";
   }
-  const scaricando = occupato && !elemento("zona-avanzamento").hidden;
-  elemento("pulsante-annulla").hidden = !scaricando;
-  elemento("pulsante-annulla").disabled = false;
+  scarica.disabled = aggiornando || analizzando || video === null;
+
+  elemento("pulsante-analizza").disabled = analizzando || aggiornando;
+  elemento("link").disabled = analizzando || aggiornando;
+  elemento("qualita").disabled = aggiornando || video === null;
+  elemento("pulsante-cartella").disabled = aggiornando;
+  elemento("pulsante-cerca").disabled = aggiornando;
+  for (const pulsante of document.querySelectorAll(".segmenti button")) {
+    pulsante.disabled = aggiornando;
+  }
 }
 
 // ---------- Aggiornamenti dell'app ----------
 
 let versioneAttuale = "";
-let versioneNuova = null; // es. "2.0.1" se c'e' un aggiornamento
+let versioneNuova = null; // es. "0.1.1" se c'e' un aggiornamento
 
 // Scrive la riga "Versione" (testo + pulsante a destra)
 function mostraVersione(testo, testoPulsante) {
@@ -366,12 +607,12 @@ async function controllaAggiornamento(silenzioso) {
       mostraVersione(`${versioneAttuale}, controllo non riuscito`, "Riprova");
     }
   }
-  elemento("pulsante-cerca").disabled = occupato;
+  elemento("pulsante-cerca").disabled = aggiornando;
 }
 
 // Il pulsante nella riga "Versione"
 function clicVersione() {
-  if (occupato) return;
+  if (aggiornando) return;
   if (versioneNuova) {
     installaAggiornamento();
   } else {
@@ -380,12 +621,15 @@ function clicVersione() {
 }
 
 async function installaAggiornamento() {
-  if (occupato) return;
-  occupato = true;
+  if (aggiornando) return;
+  if (codaAttiva) {
+    messaggioPiede("Aspetta che finiscano i download, poi aggiorna l'app.", true);
+    return;
+  }
+  aggiornando = true;
+  aggiornaPulsanti();
   elemento("barra-aggiornamento").hidden = true;
   elemento("zona-avanzamento").hidden = false;
-  aggiornaPulsanti();
-  elemento("pulsante-annulla").hidden = true; // l'aggiornamento non si annulla
   elemento("barra").style.width = "0%";
   elemento("testo-stato").textContent = "Scarico l'aggiornamento...";
   elemento("dettagli-avanzamento").textContent = `versione ${versioneNuova}`;
@@ -396,7 +640,7 @@ async function installaAggiornamento() {
   } catch (errore) {
     elemento("zona-avanzamento").hidden = true;
     messaggioPiede(errore, true);
-    occupato = false;
+    aggiornando = false;
     aggiornaPulsanti();
     mostraVersione(`${versioneAttuale}, aggiornamento non riuscito`, "Aggiorna");
   }
@@ -425,9 +669,20 @@ function mostraPrincipale() {
 async function avvio() {
   versioneAttuale = await invoke("versione_app");
   mostraVersione(versioneAttuale, "Cerca aggiornamenti");
-  cartella = await invoke("cartella_download");
+
+  // La cartella dell'ultima volta, se esiste ancora; altrimenti Download
+  const salvata = leggiImpostazione("cartella");
+  if (salvata && (await invoke("esiste_cartella", { percorso: salvata }))) {
+    cartella = salvata;
+  } else {
+    cartella = await invoke("cartella_download");
+  }
   mostraCartella();
   piedeIniziale();
+
+  // Video o Audio, come l'ultima volta
+  if (leggiImpostazione("modalita") === "audio") scegliModalita("audio");
+
   mostraVideo();
   aggiornaPulsanti();
 
@@ -436,11 +691,19 @@ async function avvio() {
     e.preventDefault();
     analizza();
   });
-  // Se incolli un link nel campo vuoto, lo analizzo subito
-  elemento("link").addEventListener("paste", () => {
+  elemento("link").addEventListener("paste", (e) => {
+    const testo = (e.clipboardData || window.clipboardData).getData("text");
+    const link = linkNelTesto(testo);
+    if (link.length > 1) {
+      // Piu' link insieme: vanno tutti nell'elenco dei download
+      e.preventDefault();
+      incollaPiuLink(link);
+      return;
+    }
+    // Un solo link nel campo vuoto: lo analizzo subito
     const eraVuoto = elemento("link").value.trim() === "";
     setTimeout(() => {
-      if (eraVuoto && elemento("link").value.includes("youtu")) analizza();
+      if (eraVuoto && link.length === 1) analizza();
     }, 50);
   });
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
@@ -448,7 +711,7 @@ async function avvio() {
   }
   elemento("pulsante-cartella").addEventListener("click", cambiaCartella);
   elemento("pulsante-scarica").addEventListener("click", scarica);
-  elemento("pulsante-annulla").addEventListener("click", annulla);
+  elemento("pulsante-pulisci").addEventListener("click", togliCompletati);
   elemento("pulsante-prepara").addEventListener("click", preparaComponenti);
   elemento("pulsante-aggiorna").addEventListener("click", installaAggiornamento);
   elemento("pulsante-cerca").addEventListener("click", clicVersione);

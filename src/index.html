@@ -77,8 +77,18 @@
         </div>
       </div>
 
+      <!-- Elenco dei download (la coda) -->
+      <section id="coda" class="coda" hidden>
+        <div class="intestazione-coda">
+          <h2>Download</h2>
+          <button type="button" id="pulsante-pulisci" class="link" hidden>Togli i completati</button>
+        </div>
+        <ul id="elenco-coda" class="elenco-coda"></ul>
+      </section>
+
       <div class="spazio"></div>
 
+      <!-- Avanzamento dell'aggiornamento dell'app -->
       <div id="zona-avanzamento" class="avanzamento" hidden>
         <div class="riga-avanzamento">
           <b id="testo-stato">Download in corso</b>
@@ -90,7 +100,6 @@
       <div class="piede">
         <p id="piede-testo" class="secondario">Il file andrà nella cartella Download.</p>
         <div class="bottoni">
-          <button type="button" id="pulsante-annulla" class="secondario" hidden>Annulla</button>
           <button type="button" id="pulsante-scarica" class="primario" disabled>Scarica video</button>
         </div>
       </div>
