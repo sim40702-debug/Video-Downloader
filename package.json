@@ -1,9 +1,14 @@
 {
   "name": "video-downloader",
   "private": true,
-  "description": "Comandi per pubblicare Video Downloader (l'app e' in Python)",
+  "description": "Video Downloader: app desktop per Mac e Windows (Tauri)",
   "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
     "rilascia": "node rilascia.js",
-    "rilascia:git": "node rilascia.js git"
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
   }
 }

@@ -1,0 +1,308 @@
+/* style.css
+   Grafica "come un'app di Apple": chiara, e scura da sola
+   quando il computer e' in modalita' scura. */
+
+/* ---------- Colori ---------- */
+:root {
+  --fondo: #f2f2f5;
+  --elenco: #ffffff;
+  --linea: #e1e1e6;
+  --linea-interna: #ececf0;
+  --campo-bordo: #d6d6dc;
+  --testo: #1d1d1f;
+  --testo-secondario: #6e6e73;
+  --blu: #0a66e8;
+  --blu-premuto: #0855c4;
+  --blu-alone: rgba(10, 102, 232, 0.22);
+  --rosso: #d70015;
+  --segmenti-fondo: #e6e6eb;
+  --segmento-attivo: #ffffff;
+  --ombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.14);
+  --copertina-vuota: #e8e8ed;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #1e1e20;
+    --elenco: #2a2a2d;
+    --linea: #3a3a3e;
+    --linea-interna: #353538;
+    --campo-bordo: #444448;
+    --testo: #f2f2f7;
+    --testo-secondario: #98989f;
+    --blu: #2f80ff;
+    --blu-premuto: #1f6ee8;
+    --blu-alone: rgba(47, 128, 255, 0.35);
+    --rosso: #ff6961;
+    --segmenti-fondo: #1c1c1e;
+    --segmento-attivo: #48484c;
+    --ombra-segmento: none;
+    --copertina-vuota: #333336;
+    color-scheme: dark;
+  }
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--fondo);
+  color: var(--testo);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums; /* i numeri non "ballano" */
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+[hidden] { display: none !important; }
+
+button, input, select { font: inherit; color: inherit; }
+
+button { cursor: default; }
+
+:focus-visible { outline: 3px solid var(--blu-alone); outline-offset: 1px; }
+
+.secondario { color: var(--testo-secondario); }
+
+.finestra { height: 100%; display: flex; flex-direction: column; }
+
+/* ---------- Pulsanti ---------- */
+.primario,
+button.secondario {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.primario {
+  background: var(--blu);
+  color: #fff;
+  border: none;
+}
+.primario:active:not(:disabled) { background: var(--blu-premuto); }
+.primario:disabled { opacity: 0.4; }
+
+button.secondario {
+  background: var(--elenco);
+  color: var(--testo);
+  border: 1px solid var(--campo-bordo);
+}
+button.secondario:active:not(:disabled) { background: var(--linea-interna); }
+button.secondario:disabled { opacity: 0.5; }
+
+.link {
+  background: none;
+  border: none;
+  color: var(--blu);
+  font-weight: 550;
+}
+
+/* ---------- Avviso aggiornamento ---------- */
+.avviso {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--elenco);
+  border-bottom: 1px solid var(--linea);
+  font-size: 12.5px;
+}
+
+/* ---------- Primo avvio ---------- */
+.preparazione {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px 64px;
+}
+.icona-grande { width: 88px; height: 88px; }
+.preparazione h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+.preparazione p { max-width: 420px; }
+.preparazione .traccia { width: 320px; }
+.preparazione .primario { margin-top: 6px; }
+
+/* ---------- Schermata principale ---------- */
+.principale {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 24px 20px;
+  min-height: 0;
+}
+
+.riga-link { display: flex; gap: 10px; }
+
+.campo {
+  flex: 1;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background: var(--elenco);
+  border: 1px solid var(--campo-bordo);
+  border-radius: 9px;
+  color: var(--testo-secondario);
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.campo:focus-within { border-color: var(--blu); box-shadow: 0 0 0 3.5px var(--blu-alone); }
+.campo input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--testo);
+  font-size: 13.5px;
+  user-select: text;
+}
+.campo input::placeholder { color: var(--testo-secondario); }
+
+.riga-link button.secondario { height: 36px; border-radius: 9px; }
+
+.messaggio { min-height: 18px; margin: 6px 2px 0; font-size: 12.5px; color: var(--testo-secondario); }
+.messaggio.errore { color: var(--rosso); }
+
+/* Elenco con video e opzioni */
+.gruppo {
+  margin-top: 6px;
+  background: var(--elenco);
+  border: 1px solid var(--linea);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.video { display: flex; gap: 14px; align-items: center; padding: 12px; }
+
+.copertina {
+  width: 160px;
+  height: 90px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--copertina-vuota);
+  overflow: hidden;
+}
+.copertina img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.testi-video { min-width: 0; }
+.titolo-video {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.meta { color: var(--testo-secondario); font-size: 12.5px; margin-top: 5px; line-height: 1.45; }
+
+.opzione {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 46px;
+  padding: 0 14px;
+  border-top: 1px solid var(--linea-interna);
+  font-size: 13.5px;
+}
+
+/* Interruttore Video / Audio */
+.segmenti {
+  display: grid;
+  grid-template-columns: 82px 82px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--segmenti-fondo);
+}
+.segmenti button {
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  color: var(--testo-secondario);
+}
+.segmenti button[aria-checked="true"] {
+  background: var(--segmento-attivo);
+  color: var(--testo);
+  font-weight: 550;
+  box-shadow: var(--ombra-segmento);
+}
+.segmenti button:disabled { opacity: 0.6; }
+
+/* Menu qualita' */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='12' viewBox='0 0 10 12' fill='none' stroke='%238e8e93' stroke-width='1.4'%3E%3Cpath d='M2 4.5l3-3 3 3M2 7.5l3 3 3-3'/%3E%3C/svg%3E") no-repeat right 2px center;
+  padding: 4px 20px 4px 8px;
+  text-align: right;
+  text-align-last: right;
+  color: var(--testo-secondario);
+  font-size: 13px;
+  max-width: 320px;
+}
+select:disabled { opacity: 0.6; }
+
+.scelta-cartella {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--blu);
+  font-size: 13px;
+  max-width: 340px;
+}
+.scelta-cartella span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scelta-cartella:disabled { opacity: 0.5; }
+
+.spazio { flex: 1; min-height: 16px; }
+
+/* Avanzamento */
+.avanzamento { margin-bottom: 14px; }
+.riga-avanzamento {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  margin-bottom: 7px;
+}
+.riga-avanzamento b { font-weight: 600; }
+.riga-avanzamento span { color: var(--testo-secondario); white-space: nowrap; }
+
+.traccia { height: 6px; border-radius: 3px; background: var(--linea); overflow: hidden; }
+.traccia i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--blu);
+  transition: width 0.25s ease-out;
+}
+
+/* Piede con i pulsanti */
+.piede { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.piede p { font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.piede p.errore { color: var(--rosso); white-space: normal; }
+.bottoni { display: flex; gap: 10px; flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

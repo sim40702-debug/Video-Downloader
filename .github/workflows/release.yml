@@ -1,14 +1,16 @@
 # Release automatica su GitHub.
 #
-# A ogni push su main questo script guarda la versione scritta in
-# aggiornamenti.py (VERSIONE = "1.0.1").
-#  - Se su GitHub la release v1.0.1 NON esiste ancora: compila l'app per
-#    Mac Apple Silicon, Mac Intel e Windows e crea la release da solo.
+# A ogni push su main questo script legge la versione in
+# src-tauri/tauri.conf.json (es. "version": "2.0.1").
+#  - Se la release v2.0.1 NON esiste ancora: compila l'app per Mac
+#    (una sola versione per Apple Silicon e Intel) e per Windows, e
+#    crea la release con il file latest.json per gli aggiornamenti.
 #  - Se esiste gia': non fa niente.
 #
-# Quindi per fare una release basta cambiare il numero di versione
-# e fare push: lo fa "npm run rilascia git".
-# Si puo' anche avviare a mano dalla scheda Actions ("Run workflow").
+# Per cambiare la versione: npm run rilascia
+# Si puo' anche avviare a mano: scheda Actions -> Release -> Run workflow.
+#
+# Serve il segreto TAURI_SIGNING_PRIVATE_KEY (vedi README).
 
 name: Release
 
@@ -22,105 +24,104 @@ permissions:
   contents: write
 
 jobs:
-  # 1) C'e' una versione nuova?
+  # 1) C'e' una versione nuova? Se si', prepara la release (ancora nascosta)
   controlla:
     runs-on: ubuntu-latest
     outputs:
       versione: ${{ steps.versione.outputs.versione }}
       nuova: ${{ steps.versione.outputs.nuova }}
+      id_release: ${{ steps.release.outputs.id }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Scarica il codice
         uses: actions/checkout@v4
 
       - name: Leggi la versione e controlla se la release esiste
         id: versione
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSIONE=$(grep '^VERSIONE = ' aggiornamenti.py | cut -d'"' -f2)
+          VERSIONE=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VERSIONE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "v$VERSIONE" >/dev/null 2>&1; then
             echo "La release v$VERSIONE esiste gia': niente da fare."
             echo "nuova=no" >> "$GITHUB_OUTPUT"
           else
-            echo "Nuova versione v$VERSIONE: la compilo e creo la release."
+            echo "Nuova versione v$VERSIONE: la compilo."
             echo "nuova=si" >> "$GITHUB_OUTPUT"
           fi
 
-  # 2) Compilazione sui tre sistemi
+      - name: Crea la release (nascosta finche' non e' pronta)
+        id: release
+        if: steps.versione.outputs.nuova == 'si'
+        run: |
+          V="${{ steps.versione.outputs.versione }}"
+          # Tolgo le bozze rimaste da un tentativo fallito
+          for VECCHIA in $(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.draft and .tag_name == \"v$V\") | .id"); do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$VECCHIA"
+          done
+          gh release create "v$V" --draft --title "Video Downloader $V" --generate-notes --target "$GITHUB_SHA"
+          ID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"v$V\") | .id")
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+  # 2) Compilazione: Mac (universale) e Windows
   compila:
     needs: controlla
     if: needs.controlla.outputs.nuova == 'si'
     strategy:
-      fail-fast: false   # se una compilazione fallisce, le altre continuano
+      fail-fast: false
       matrix:
         include:
-          - runner: macos-15          # Mac Apple Silicon (M1, M2, M3, M4...)
-          - runner: macos-15-intel    # Mac Intel
-          - runner: windows-latest    # Windows
-    runs-on: ${{ matrix.runner }}
+          - piattaforma: macos-latest
+            argomenti: --target universal-apple-darwin
+            obiettivi_rust: aarch64-apple-darwin,x86_64-apple-darwin
+          - piattaforma: windows-latest
+            argomenti: ""
+            obiettivi_rust: ""
+    runs-on: ${{ matrix.piattaforma }}
 
     steps:
       - name: Scarica il codice
         uses: actions/checkout@v4
 
-      - name: Installa Python
-        uses: actions/setup-python@v5
+      - name: Installa Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
+          node-version: 22
 
-      - name: Prepara e testa (Mac)
-        if: runner.os == 'macOS'
-        run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python -m unittest discover -s tests -v
-
-      - name: Prepara e testa (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          python -m venv .venv
-          .venv\Scripts\python -m pip install --upgrade pip
-          .venv\Scripts\python -m pip install -r requirements.txt
-          .venv\Scripts\python -m unittest discover -s tests -v
-
-      - name: Compila (Mac)
-        if: runner.os == 'macOS'
-        run: |
-          chmod +x build_mac.sh
-          ./build_mac.sh
-
-      - name: Compila (Windows)
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: call build_windows.bat
-
-      - name: Conserva lo zip
-        uses: actions/upload-artifact@v4
+      - name: Installa Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: zip-${{ matrix.runner }}
-          path: dist/*.zip
+          targets: ${{ matrix.obiettivi_rust }}
 
-  # 3) Una sola release con tutti gli zip
-  release:
+      - name: Ricorda la compilazione di Rust (piu' veloce la prossima volta)
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Installa le librerie JavaScript
+        run: npm ci
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Compila e carica nella release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          releaseId: ${{ needs.controlla.outputs.id_release }}
+          args: ${{ matrix.argomenti }} --config src-tauri/tauri.release.conf.json
+
+  # 3) Tutto pronto: la release diventa visibile
+  pubblica:
     needs: [controlla, compila]
-    if: ${{ !cancelled() && needs.controlla.outputs.nuova == 'si' }}
+    if: needs.controlla.outputs.nuova == 'si'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Prendi gli zip compilati
-        uses: actions/download-artifact@v4
-        with:
-          path: zip
-          merge-multiple: true
-
-      - name: Crea la release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.controlla.outputs.versione }}
-          name: Video Downloader ${{ needs.controlla.outputs.versione }}
-          target_commitish: ${{ github.sha }}
-          files: zip/*.zip
-          fail_on_unmatched_files: true
-          generate_release_notes: true
+      - name: Pubblica la release
+        run: gh release edit "v${{ needs.controlla.outputs.versione }}" --draft=false --latest --repo "$GITHUB_REPOSITORY"

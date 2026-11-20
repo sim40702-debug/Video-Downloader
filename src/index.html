@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Downloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="finestra">
+
+    <!-- Avviso quando c'e' una versione nuova dell'app -->
+    <div id="barra-aggiornamento" class="avviso" hidden>
+      <span id="testo-aggiornamento"></span>
+      <button id="pulsante-aggiorna" class="link">Aggiorna</button>
+    </div>
+
+    <!-- Primo avvio: scarico yt-dlp, FFmpeg e Deno -->
+    <section id="preparazione" class="preparazione" hidden>
+      <img src="icona.png" alt="" class="icona-grande">
+      <h1>Prima di iniziare</h1>
+      <p>Per scaricare i video servono tre programmi gratuiti: yt-dlp, FFmpeg e Deno.
+         Li scarico adesso, solo questa volta (circa 140&nbsp;MB).</p>
+      <div class="traccia" id="traccia-preparazione" hidden><i id="barra-preparazione"></i></div>
+      <p id="testo-preparazione" class="secondario"></p>
+      <button id="pulsante-prepara" class="primario">Scarica i componenti</button>
+    </section>
+
+    <!-- Schermata principale -->
+    <section id="principale" class="principale" hidden>
+      <form id="modulo-link" class="riga-link" autocomplete="off">
+        <label class="campo">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6.5 9.5l3-3"/><path d="M7.5 4.5l1-1a2.8 2.8 0 014 4l-1 1"/><path d="M8.5 11.5l-1 1a2.8 2.8 0 01-4-4l1-1"/></svg>
+          <input id="link" type="text" placeholder="Incolla il link di un video" spellcheck="false" aria-label="Link del video">
+        </label>
+        <button type="submit" id="pulsante-analizza" class="secondario">Analizza</button>
+      </form>
+      <p id="messaggio-link" class="messaggio" role="status"></p>
+
+      <div class="gruppo">
+        <div class="video">
+          <div class="copertina"><img id="copertina" alt="" hidden></div>
+          <div class="testi-video">
+            <div id="titolo" class="titolo-video">Nessun video</div>
+            <div id="dettagli" class="meta">Incolla un link e premi Analizza: qui vedrai titolo, durata e qualità disponibili.</div>
+          </div>
+        </div>
+
+        <div class="opzione">
+          <span>Formato</span>
+          <div class="segmenti" role="radiogroup" aria-label="Formato">
+            <button type="button" role="radio" data-modalita="video" aria-checked="true">Video</button>
+            <button type="button" role="radio" data-modalita="audio" aria-checked="false">Audio</button>
+          </div>
+        </div>
+
+        <div class="opzione">
+          <label for="qualita">Qualità</label>
+          <select id="qualita" disabled></select>
+        </div>
+
+        <div class="opzione">
+          <span>Salva in</span>
+          <button type="button" id="pulsante-cartella" class="scelta-cartella">
+            <svg width="15" height="12" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true"><path d="M1 2.5a1 1 0 011-1h3l1.3 1.5H12a1 1 0 011 1V10a1 1 0 01-1 1H2a1 1 0 01-1-1z"/></svg>
+            <span id="nome-cartella">Download</span>
+            <svg width="9" height="12" viewBox="0 0 10 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 4.5l3-3 3 3M2 7.5l3 3 3-3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="spazio"></div>
+
+      <div id="zona-avanzamento" class="avanzamento" hidden>
+        <div class="riga-avanzamento">
+          <b id="testo-stato">Download in corso</b>
+          <span id="dettagli-avanzamento"></span>
+        </div>
+        <div class="traccia"><i id="barra"></i></div>
+      </div>
+
+      <div class="piede">
+        <p id="piede-testo" class="secondario">Il file andrà nella cartella Download.</p>
+        <div class="bottoni">
+          <button type="button" id="pulsante-annulla" class="secondario" hidden>Annulla</button>
+          <button type="button" id="pulsante-scarica" class="primario" disabled>Scarica video</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

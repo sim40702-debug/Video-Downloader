@@ -1,7 +1,0 @@
-# Librerie Python dell'app (si installano con install.sh o install_windows.bat)
-customtkinter>=5.2
-# [default] aggiunge anche yt-dlp-ejs (serve per YouTube) e certifi
-yt-dlp[default]>=2025.11.12
-pillow>=10.0
-# per caricare le release su Gitea (pubblica_release.py)
-requests>=2.31

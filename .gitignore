@@ -1,9 +1,6 @@
-.venv/
-dist/
-build/
-build_temp/
-*.spec
-__pycache__/
+node_modules/
+src-tauri/target/
+src-tauri/gen/
 .DS_Store
-# token di Gitea: non deve mai finire su GitHub
-.gitea-token
+# chiave per firmare gli aggiornamenti: non deve mai finire su GitHub
+*.key

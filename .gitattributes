@@ -1,5 +1,4 @@
-# Fine riga giusta per ogni sistema (i .bat su Windows vogliono CRLF)
-*.bat text eol=crlf
-*.sh text eol=lf
-*.command text eol=lf
-*.py text eol=lf
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
