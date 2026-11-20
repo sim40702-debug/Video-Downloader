@@ -35,14 +35,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Scarica il codice
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Leggi la versione e controlla se la release esiste
         id: versione
         run: |
           VERSIONE=$(node -p "require('./src-tauri/tauri.conf.json').version")
           echo "versione=$VERSIONE" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VERSIONE" >/dev/null 2>&1; then
+          if [ "$(gh release view "v$VERSIONE" --json isDraft -q .isDraft 2>/dev/null)" = "false" ]; then
             echo "La release v$VERSIONE esiste gia': niente da fare."
             echo "nuova=no" >> "$GITHUB_OUTPUT"
           else
@@ -81,10 +81,10 @@ jobs:
 
     steps:
       - name: Scarica il codice
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Installa Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -99,7 +99,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Installa le librerie JavaScript
-        run: npm ci
+        run: npm install
 
       - name: Test
         working-directory: src-tauri
