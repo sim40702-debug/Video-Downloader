@@ -1,6 +1,6 @@
 /* style.css
-   Grafica "come un'app di Apple": chiara, e scura da sola
-   quando il computer e' in modalita' scura. */
+   Grafica "come un'app di Apple": chiara o scura (Impostazioni > Tema).
+   La usano sia la finestra principale sia la finestra Impostazioni. */
 
 /* ---------- Colori ---------- */
 :root {
@@ -19,11 +19,15 @@
   --segmento-attivo: #ffffff;
   --ombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.14);
   --copertina-vuota: #e8e8ed;
+  --barra-schede: #e9e9ec;
+  --scheda-scelta: #dcdce1;
+  --interruttore-spento: #d9d9de;
   color-scheme: light;
 }
 
+/* Tema scuro: quando il sistema e' scuro (se nelle Impostazioni c'e' "Automatico")... */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="chiaro"]) {
     --fondo: #1e1e20;
     --elenco: #2a2a2d;
     --linea: #3a3a3e;
@@ -40,7 +44,33 @@
     --ombra-segmento: none;
     --copertina-vuota: #333336;
     color-scheme: dark;
+    --barra-schede: #2c2c2e;
+    --scheda-scelta: #3e3e42;
+    --interruttore-spento: #48484c;
   }
+}
+
+/* ...oppure sempre, se nelle Impostazioni c'e' "Scuro" */
+:root[data-tema="scuro"] {
+    --fondo: #1e1e20;
+    --elenco: #2a2a2d;
+    --linea: #3a3a3e;
+    --linea-interna: #353538;
+    --campo-bordo: #444448;
+    --testo: #f2f2f7;
+    --testo-secondario: #98989f;
+    --blu: #2f80ff;
+    --blu-premuto: #1f6ee8;
+    --blu-alone: rgba(47, 128, 255, 0.35);
+    --rosso: #ff6961;
+    --segmenti-fondo: #1c1c1e;
+    --segmento-attivo: #48484c;
+    --ombra-segmento: none;
+    --copertina-vuota: #333336;
+    color-scheme: dark;
+    --barra-schede: #2c2c2e;
+    --scheda-scelta: #3e3e42;
+    --interruttore-spento: #48484c;
 }
 
 /* ---------- Base ---------- */
@@ -390,3 +420,126 @@ select:disabled { opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+
+/* ---------- Pulsante Impostazioni (finestra principale) ---------- */
+.riga-link .icona {
+  width: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--testo-secondario);
+}
+
+/* ================== Finestra Impostazioni ================== */
+.finestra-impostazioni { display: flex; flex-direction: column; }
+
+/* Le tre schede in alto */
+.schede {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+  background: var(--barra-schede);
+  border-bottom: 1px solid var(--linea);
+  flex: none;
+}
+.scheda {
+  width: 76px;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--testo-secondario);
+  font-size: 11px;
+}
+.scheda[aria-selected="true"] {
+  background: var(--scheda-scelta);
+  color: var(--blu);
+}
+.scheda[aria-selected="true"] span { color: var(--testo); font-weight: 600; }
+
+.pannello { flex: 1; min-height: 0; padding: 6px 20px 20px; overflow-y: auto; }
+.pannello h2 {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--testo-secondario);
+  margin: 16px 6px 6px;
+}
+.pannello .nota {
+  font-size: 11.5px;
+  color: var(--testo-secondario);
+  margin: 6px 6px 0;
+}
+
+.gruppo-imp {
+  background: var(--elenco);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.riga-imp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-top: 1px solid var(--linea-interna);
+  font-size: 13.5px;
+}
+.riga-imp:first-child { border-top: none; }
+.riga-imp.alta b { display: block; font-weight: 550; }
+.riga-imp.alta small { display: block; font-size: 11.5px; color: var(--testo-secondario); margin-top: 1px; }
+.riga-imp .destra { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.riga-imp .cartella { display: flex; align-items: center; gap: 6px; }
+
+.segmenti.tre { grid-template-columns: 86px 86px 86px; }
+
+/* Pulsantino come quelli del Mac */
+button.piccolo {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--campo-bordo);
+  background: var(--elenco);
+  color: var(--testo);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+button.piccolo:active:not(:disabled) { background: var(--linea-interna); }
+button.piccolo:disabled { opacity: 0.5; }
+button.piccolo.pericolo { color: var(--rosso); border-color: var(--rosso); }
+
+/* Interruttore acceso/spento (e' una casella di spunta disegnata diversamente) */
+.interruttore {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--interruttore-spento);
+  position: relative;
+  transition: background 0.2s;
+}
+.interruttore::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+.interruttore:checked { background: var(--blu); }
+.interruttore:checked::after { transform: translateX(16px); }

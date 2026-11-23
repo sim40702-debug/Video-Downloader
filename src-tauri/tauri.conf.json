@@ -13,9 +13,9 @@
         "label": "main",
         "title": "Video Downloader",
         "width": 700,
-        "height": 720,
+        "height": 680,
         "minWidth": 600,
-        "minHeight": 640
+        "minHeight": 600
       }
     ],
     "security": {

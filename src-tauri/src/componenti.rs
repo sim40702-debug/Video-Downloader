@@ -100,6 +100,49 @@ pub fn trova(programma: &str, cartella_app: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Versione di un programma, letta dalla sua prima riga (es. "ffmpeg version 6.0 ...")
+pub fn versione(programma: &str, percorso: &Path) -> String {
+    let opzione = if programma == FFMPEG { "-version" } else { "--version" };
+    let mut cmd = Command::new(percorso);
+    cmd.arg(opzione);
+    crate::ytdlp::nascondi_finestra(&mut cmd);
+    match cmd.output() {
+        Ok(uscita) => {
+            let testo = String::from_utf8_lossy(&uscita.stdout).to_string();
+            versione_da_testo(programma, &testo)
+        }
+        Err(_) => "non funziona".into(),
+    }
+}
+
+/// Prende solo il numero di versione dal testo scritto dal programma
+pub fn versione_da_testo(programma: &str, testo: &str) -> String {
+    let prima = testo.lines().next().unwrap_or("").trim();
+    let pezzi: Vec<&str> = prima.split_whitespace().collect();
+    let numero = match programma {
+        FFMPEG => pezzi.get(2).copied(),   // "ffmpeg version 6.0 ..."
+        DENO => pezzi.get(1).copied(),     // "deno 2.5.6 (stable, ...)"
+        _ => pezzi.first().copied(),       // "2026.11.12"
+    };
+    let numero = numero.unwrap_or("?");
+    // Le versioni di FFmpeg a volte sono lunghissime: teniamo la parte iniziale
+    numero.split('-').next().unwrap_or(numero).to_string()
+}
+
+/// Da dove arriva il programma: dall'app, da Homebrew, da winget...
+pub fn origine(percorso: &Path, cartella_app: &Path) -> String {
+    let testo = percorso.to_string_lossy().to_lowercase();
+    if percorso.starts_with(cartella_app) {
+        "dell'app".into()
+    } else if testo.contains("homebrew") || testo.starts_with("/usr/local/") {
+        "da Homebrew".into()
+    } else if testo.contains("winget") {
+        "da winget".into()
+    } else {
+        "dal sistema".into()
+    }
+}
+
 /// Scarica un programma nella cartella dell'app.
 /// avvisa(percentuale) viene chiamata durante il download.
 pub fn installa(programma: &str, cartella_app: &Path, avvisa: &dyn Fn(f64)) -> Result<PathBuf, String> {
@@ -216,6 +259,23 @@ mod test {
         assert!(indirizzo(DENO, "macos", "aarch64").unwrap().contains("aarch64-apple-darwin"));
         assert!(indirizzo(DENO, "macos", "x86_64").unwrap().contains("x86_64-apple-darwin"));
         assert!(indirizzo(YTDLP, "android", "x86_64").is_none());
+    }
+
+    #[test]
+    fn versioni_lette_bene() {
+        assert_eq!(versione_da_testo(YTDLP, "2026.11.12\n"), "2026.11.12");
+        assert_eq!(versione_da_testo(FFMPEG, "ffmpeg version 6.0-static https://x Copyright"), "6.0");
+        assert_eq!(versione_da_testo(DENO, "deno 2.5.6 (stable, release, aarch64-apple-darwin)\nv8 13"), "2.5.6");
+        assert_eq!(versione_da_testo(DENO, ""), "?");
+    }
+
+    #[test]
+    fn origini() {
+        let app = Path::new("/Users/s/Library/Application Support/x/programmi");
+        assert_eq!(origine(&app.join("ffmpeg"), app), "dell'app");
+        assert_eq!(origine(Path::new("/opt/homebrew/bin/deno"), app), "da Homebrew");
+        assert_eq!(origine(Path::new("/usr/local/bin/deno"), app), "da Homebrew");
+        assert_eq!(origine(Path::new("C:\\Users\\s\\AppData\\Local\\Microsoft\\WinGet\\Links\\deno.exe"), app), "da winget");
     }
 
     #[test]

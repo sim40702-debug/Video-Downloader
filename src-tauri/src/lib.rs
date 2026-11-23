@@ -7,8 +7,10 @@
 // ------------------------------------------------------------
 
 mod componenti;
+mod impostazioni;
 mod ytdlp;
 
+use impostazioni::Impostazioni;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -82,19 +84,35 @@ async fn installa_componenti(app: AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Aggiorna yt-dlp (all'avvio, in sottofondo): così segue i cambiamenti di YouTube
+/// Aggiorna yt-dlp: così segue i cambiamenti di YouTube.
+/// Restituisce la versione dopo l'aggiornamento e ricorda quando è stato fatto.
 #[tauri::command]
-async fn aggiorna_ytdlp(app: AppHandle) {
+async fn aggiorna_ytdlp(app: AppHandle) -> Result<String, String> {
     let cartella = cartella_programmi(&app);
-    let _ = tauri::async_runtime::spawn_blocking(move || {
-        if let Some(ytdlp) = componenti::trova(componenti::YTDLP, &cartella) {
-            let mut cmd = Command::new(ytdlp);
-            cmd.arg("-U");
-            ytdlp::nascondi_finestra(&mut cmd);
-            let _ = cmd.output();
-        }
+    let versione = tauri::async_runtime::spawn_blocking(move || {
+        let ytdlp = componenti::trova(componenti::YTDLP, &cartella).ok_or("yt-dlp non c'è.")?;
+        let mut cmd = Command::new(&ytdlp);
+        cmd.arg("-U");
+        ytdlp::nascondi_finestra(&mut cmd);
+        let _ = cmd.output();
+        Ok::<String, String>(componenti::versione(componenti::YTDLP, &ytdlp))
     })
-    .await;
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let mut imp = impostazioni::leggi(&app);
+    imp.ultimo_controllo_ytdlp = Some(adesso());
+    let _ = impostazioni::salva(&app, &imp);
+    let _ = app.emit("impostazioni", imp);
+    Ok(versione)
+}
+
+/// Secondi passati dal 1970 (per ricordare quando è stato fatto qualcosa)
+fn adesso() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 // ---------------- analisi e download ----------------
@@ -118,6 +136,7 @@ async fn scarica(
     cartella: String,
 ) -> Result<String, String> {
     let strumenti = strumenti(&app)?;
+    let sostituisci = impostazioni::leggi(&app).se_esiste == "sostituisci";
     let processo = stato.processo.clone();
     let annullato = stato.annullato.clone();
     let finestra = app.clone();
@@ -136,7 +155,7 @@ async fn scarica(
     tauri::async_runtime::spawn_blocking(move || {
         ytdlp::scarica(
             &strumenti, &url, &titolo, &modalita, qualita,
-            &PathBuf::from(cartella), processo, annullato, avvisa,
+            &PathBuf::from(cartella), sostituisci, processo, annullato, avvisa,
         )
         .map(|percorso| percorso.to_string_lossy().to_string())
     })
@@ -203,6 +222,159 @@ fn notifica(app: AppHandle, titolo: String, testo: String) {
     let _ = app.notification().builder().title(titolo).body(testo).show();
 }
 
+// ---------------- impostazioni ----------------
+
+#[tauri::command]
+fn leggi_impostazioni(app: AppHandle) -> Impostazioni {
+    impostazioni::leggi(&app)
+}
+
+/// Salva le impostazioni e avvisa tutte le finestre (evento "impostazioni")
+#[tauri::command]
+fn salva_impostazioni(app: AppHandle, impostazioni: Impostazioni) -> Result<(), String> {
+    impostazioni::salva(&app, &impostazioni)?;
+    applica_tema(&app, &impostazioni.tema);
+    let _ = app.emit("impostazioni", impostazioni);
+    Ok(())
+}
+
+/// Torna alle impostazioni di partenza
+#[tauri::command]
+fn ripristina_impostazioni(app: AppHandle) -> Result<Impostazioni, String> {
+    let nuove = Impostazioni {
+        // l'ora dell'ultimo controllo di yt-dlp non è una scelta: la teniamo
+        ultimo_controllo_ytdlp: impostazioni::leggi(&app).ultimo_controllo_ytdlp,
+        ..Impostazioni::default()
+    };
+    salva_impostazioni(app, nuove.clone())?;
+    Ok(nuove)
+}
+
+/// Chiaro, scuro o come il sistema, per tutte le finestre aperte
+fn applica_tema(app: &AppHandle, tema: &str) {
+    let scelta = match tema {
+        "chiaro" => Some(tauri::Theme::Light),
+        "scuro" => Some(tauri::Theme::Dark),
+        _ => None, // automatico
+    };
+    for finestra in app.webview_windows().values() {
+        let _ = finestra.set_theme(scelta);
+    }
+}
+
+#[derive(Serialize)]
+struct InfoComponente {
+    nome: String,
+    versione: String,
+    origine: String,
+}
+
+/// Versione e provenienza di yt-dlp, FFmpeg e Deno (scheda Componenti)
+#[tauri::command]
+async fn versioni_componenti(app: AppHandle) -> Vec<InfoComponente> {
+    let cartella = cartella_programmi(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut lista = Vec::new();
+        for nome in [componenti::YTDLP, componenti::FFMPEG, componenti::DENO] {
+            match componenti::trova(nome, &cartella) {
+                Some(percorso) => lista.push(InfoComponente {
+                    nome: nome.to_string(),
+                    versione: componenti::versione(nome, &percorso),
+                    origine: componenti::origine(&percorso, &cartella),
+                }),
+                None => lista.push(InfoComponente {
+                    nome: nome.to_string(),
+                    versione: "manca".into(),
+                    origine: String::new(),
+                }),
+            }
+        }
+        lista
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Apre la cartella dove l'app tiene yt-dlp, FFmpeg e Deno
+#[tauri::command]
+fn mostra_cartella_programmi(app: AppHandle) {
+    let cartella = cartella_programmi(&app);
+    let _ = std::fs::create_dir_all(&cartella);
+    #[cfg(target_os = "macos")]
+    let comando = "open";
+    #[cfg(windows)]
+    let comando = "explorer";
+    #[cfg(target_os = "linux")]
+    let comando = "xdg-open";
+    let _ = Command::new(comando).arg(&cartella).spawn();
+}
+
+/// Apre la finestra Impostazioni (o la porta davanti se è già aperta)
+#[tauri::command]
+async fn apri_impostazioni(app: AppHandle) {
+    apri_finestra_impostazioni(&app);
+}
+
+fn apri_finestra_impostazioni(app: &AppHandle) {
+    if let Some(finestra) = app.get_webview_window("impostazioni") {
+        let _ = finestra.show();
+        let _ = finestra.set_focus();
+        return;
+    }
+    let finestra = tauri::WebviewWindowBuilder::new(
+        app,
+        "impostazioni",
+        tauri::WebviewUrl::App("impostazioni.html".into()),
+    )
+    .title("Generali")
+    .inner_size(560.0, 520.0)
+    .resizable(false)
+    .minimizable(false)
+    .build();
+    if let Ok(finestra) = finestra {
+        let tema = impostazioni::leggi(app).tema;
+        let scelta = match tema.as_str() {
+            "chiaro" => Some(tauri::Theme::Light),
+            "scuro" => Some(tauri::Theme::Dark),
+            _ => None,
+        };
+        let _ = finestra.set_theme(scelta);
+    }
+}
+
+/// Menu del Mac, con "Impostazioni..." e la scorciatoia ⌘,
+#[cfg(target_os = "macos")]
+fn crea_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+    let impostazioni = MenuItem::with_id(app, "impostazioni", "Impostazioni…", true, Some("CmdOrCtrl+,"))?;
+    let menu_app = Submenu::with_items(app, "Video Downloader", true, &[
+        &PredefinedMenuItem::about(app, Some("Informazioni su Video Downloader"), None)?,
+        &PredefinedMenuItem::separator(app)?,
+        &impostazioni,
+        &PredefinedMenuItem::separator(app)?,
+        &PredefinedMenuItem::hide(app, Some("Nascondi Video Downloader"))?,
+        &PredefinedMenuItem::hide_others(app, Some("Nascondi altre"))?,
+        &PredefinedMenuItem::show_all(app, Some("Mostra tutte"))?,
+        &PredefinedMenuItem::separator(app)?,
+        &PredefinedMenuItem::quit(app, Some("Esci da Video Downloader"))?,
+    ])?;
+    // Senza il menu Modifica, Cmd+C e Cmd+V non funzionano nei campi di testo
+    let menu_modifica = Submenu::with_items(app, "Modifica", true, &[
+        &PredefinedMenuItem::undo(app, Some("Annulla"))?,
+        &PredefinedMenuItem::redo(app, Some("Ripeti"))?,
+        &PredefinedMenuItem::separator(app)?,
+        &PredefinedMenuItem::cut(app, Some("Taglia"))?,
+        &PredefinedMenuItem::copy(app, Some("Copia"))?,
+        &PredefinedMenuItem::paste(app, Some("Incolla"))?,
+        &PredefinedMenuItem::select_all(app, Some("Seleziona tutto"))?,
+    ])?;
+    let menu_finestra = Submenu::with_items(app, "Finestra", true, &[
+        &PredefinedMenuItem::minimize(app, Some("Contrai"))?,
+        &PredefinedMenuItem::close_window(app, Some("Chiudi"))?,
+    ])?;
+    Menu::with_items(app, &[&menu_app, &menu_modifica, &menu_finestra])
+}
+
 // ---------------- aggiornamenti dell'app ----------------
 
 #[derive(Serialize)]
@@ -266,7 +438,17 @@ fn versione_app(app: AppHandle) -> String {
 // ---------------- avvio ----------------
 
 pub fn avvia() {
-    tauri::Builder::default()
+    let costruttore = tauri::Builder::default();
+
+    // Sul Mac c'è la barra dei menu con "Impostazioni..." (⌘,)
+    #[cfg(target_os = "macos")]
+    let costruttore = costruttore.menu(crea_menu).on_menu_event(|app, evento| {
+        if evento.id().as_ref() == "impostazioni" {
+            apri_finestra_impostazioni(app);
+        }
+    });
+
+    costruttore
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -274,11 +456,21 @@ pub fn avvia() {
             processo: Arc::new(Mutex::new(None)),
             annullato: Arc::new(AtomicBool::new(false)),
         })
-        // Se chiudi la finestra durante un download, fermiamo yt-dlp
+        // All'avvio: tema scelto nelle impostazioni
+        .setup(|app| {
+            let tema = impostazioni::leggi(app.handle()).tema;
+            applica_tema(app.handle(), &tema);
+            Ok(())
+        })
+        // Se chiudi la finestra principale: fermiamo il download e chiudiamo tutto
+        // (chiudere la finestra Impostazioni invece non ferma niente)
         .on_window_event(|finestra, evento| {
             if let tauri::WindowEvent::Destroyed = evento {
-                let stato = finestra.state::<Stato>();
-                ytdlp::annulla(&stato.processo, &stato.annullato);
+                if finestra.label() == "main" {
+                    let stato = finestra.state::<Stato>();
+                    ytdlp::annulla(&stato.processo, &stato.annullato);
+                    finestra.app_handle().exit(0);
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -296,6 +488,12 @@ pub fn avvia() {
             controlla_aggiornamento,
             installa_aggiornamento,
             versione_app,
+            leggi_impostazioni,
+            salva_impostazioni,
+            ripristina_impostazioni,
+            versioni_componenti,
+            mostra_cartella_programmi,
+            apri_impostazioni,
         ])
         .run(tauri::generate_context!())
         .expect("errore all'avvio dell'app");

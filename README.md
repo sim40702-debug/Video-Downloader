@@ -17,7 +17,10 @@ Fatta con **Tauri**: la grafica è in HTML, CSS e JavaScript, la parte che lavor
 - **Più download insieme**: mentre uno scarica puoi analizzare altri link e premere **Aggiungi ai download**; vengono scaricati uno dopo l'altro. Se incolli più link in una volta, finiscono tutti nell'elenco con il formato e la qualità scelti.
 - Il pulsante tondo a destra di ogni download lo **ferma** (i file a metà vengono cancellati) o, quando è finito, lo **mostra nel Finder**. **Togli i completati** pulisce l'elenco.
 - Se stai usando un'altra app, a fine download arriva la **notifica** del sistema.
-- L'app **ricorda la cartella** e il formato (Video o Audio) scelti l'ultima volta.
+- **Impostazioni** (pulsante accanto ad Analizza, oppure ⌘, sul Mac e Ctrl+, su Windows):
+  - *Generali*: tema automatico, chiaro o scuro; notifiche; controllo degli aggiornamenti.
+  - *Download*: cartella, formato e qualità con cui parte l'app, nome del file (titolo, canale - titolo, data - titolo), cosa fare se il file esiste già (copia o sostituisci).
+  - *Componenti*: versioni di yt-dlp, FFmpeg e Deno, aggiornamento di yt-dlp, ripristino delle impostazioni.
 - Se il file esiste già non lo sovrascrive: crea `Titolo (2).mp4`.
 - Grafica chiara o scura, segue da sola il sistema.
 - Quando esce una versione nuova compare un avviso in alto: **Aggiorna**, e l'app si aggiorna e si riavvia.
@@ -125,12 +128,15 @@ Video-Downloader/
 │   ├── index.html               com'è fatta la finestra
 │   ├── style.css                colori e stile (chiaro e scuro)
 │   ├── app.js                   cosa succede quando premi i pulsanti
+│   ├── impostazioni.html        la finestra Impostazioni
+│   ├── impostazioni.js          la logica della finestra Impostazioni
 │   └── icona.png                icona per la schermata del primo avvio
 ├── src-tauri/                   la parte in Rust
 │   ├── src/main.rs              avvio
 │   ├── src/lib.rs               i comandi che la grafica chiama con invoke()
 │   ├── src/ytdlp.rs             analisi, download, annullamento, errori in italiano
 │   ├── src/componenti.rs        trova o scarica yt-dlp, FFmpeg e Deno
+│   ├── src/impostazioni.rs      salva e legge le impostazioni (impostazioni.json)
 │   ├── tauri.conf.json          nome, versione, finestra, aggiornamenti
 │   ├── tauri.release.conf.json  in più per le release (file per gli aggiornamenti)
 │   ├── capabilities/            permessi della finestra

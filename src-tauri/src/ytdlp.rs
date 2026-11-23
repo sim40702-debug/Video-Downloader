@@ -41,6 +41,8 @@ pub struct InfoVideo {
     pub durata: Option<f64>,
     pub visualizzazioni: Option<u64>,
     pub copertina: String,
+    /// Data di pubblicazione, es. "2026-11-15"
+    pub data: Option<String>,
     pub qualita: Vec<Qualita>,
 }
 
@@ -255,7 +257,17 @@ pub fn leggi_info(json: &Value) -> InfoVideo {
         visualizzazioni: json["view_count"].as_u64(),
         // mqdefault è già in 16:9, senza bande nere
         copertina: format!("https://i.ytimg.com/vi/{id}/mqdefault.jpg"),
+        data: data_leggibile(json["upload_date"].as_str().unwrap_or("")),
         qualita: qualita_disponibili(json),
+    }
+}
+
+/// "20261115" -> "2026-11-15"
+pub fn data_leggibile(testo: &str) -> Option<String> {
+    if testo.len() == 8 && testo.chars().all(|c| c.is_ascii_digit()) {
+        Some(format!("{}-{}-{}", &testo[0..4], &testo[4..6], &testo[6..8]))
+    } else {
+        None
     }
 }
 
@@ -383,6 +395,7 @@ pub fn scarica(
     modalita: &str,
     qualita: u64,
     cartella: &Path,
+    sostituisci: bool,
     processo: Arc<Mutex<Option<Child>>>,
     annullato: Arc<AtomicBool>,
     avvisa: Arc<dyn Fn(Riga) + Send + Sync>,
@@ -456,10 +469,23 @@ pub fn scarica(
         return Err(messaggio_errore(&errore));
     }
 
-    match file_finale {
-        Some(percorso) if percorso.exists() => Ok(percorso),
-        _ => Ok(previsto),
+    let scaricato = match file_finale {
+        Some(percorso) if percorso.exists() => percorso,
+        _ => previsto,
+    };
+
+    // "Se esiste già: sostituisci": solo adesso che il download è riuscito
+    // mettiamo il file nuovo al posto di quello vecchio
+    if sostituisci {
+        let originale = cartella.join(format!("{}.{estensione}", pulisci_nome(titolo)));
+        if originale != scaricato {
+            let _ = fs::remove_file(&originale);
+            if fs::rename(&scaricato, &originale).is_ok() {
+                return Ok(originale);
+            }
+        }
     }
+    Ok(scaricato)
 }
 
 /// Ferma il download in corso
@@ -604,6 +630,13 @@ mod test {
     }
 
     #[test]
+    fn date() {
+        assert_eq!(data_leggibile("20261115"), Some("2026-11-15".to_string()));
+        assert_eq!(data_leggibile(""), None);
+        assert_eq!(data_leggibile("2026"), None);
+    }
+
+    #[test]
     fn formati() {
         let video = argomenti_formato("video", 1080).join(" ");
         assert!(video.contains("res:1080,ext:mp4:m4a,vcodec:h264"));
@@ -697,7 +730,7 @@ mod test {
         let copia = righe.clone();
         let avvisa: Arc<dyn Fn(Riga) + Send + Sync> = Arc::new(move |r| copia.lock().unwrap().push(r));
         let primo = scarica(&strumenti, &url, "Prova: 100% video", "video", 360,
-                            &cartella, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
+                            &cartella, false, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
         assert!(primo.exists());
         assert!(primo.to_string_lossy().ends_with("Prova- 100% video.mp4"));
         let ultima = righe.lock().unwrap().iter().filter_map(|r| match r {
@@ -706,15 +739,22 @@ mod test {
 
         // 2) Stesso video di nuovo: non deve sovrascrivere
         let secondo = scarica(&strumenti, &url, "Prova: 100% video", "video", 360,
-                              &cartella, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
+                              &cartella, false, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
         assert!(secondo.to_string_lossy().ends_with("Prova- 100% video (2).mp4"));
 
         // 3) Audio MP3, con il messaggio di conversione
         righe.lock().unwrap().clear();
         let mp3 = scarica(&strumenti, &url, "Canzone", "audio", 128,
-                          &cartella, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
+                          &cartella, false, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
         assert!(mp3.to_string_lossy().ends_with("Canzone.mp3"));
         assert!(righe.lock().unwrap().contains(&Riga::Conversione("Creo il file MP3...".into())));
+
+        // 4) "Sostituisci": il file vecchio viene rimpiazzato, niente copia (2)
+        let vecchio = fs::metadata(&mp3).unwrap().len();
+        let rifatto = scarica(&strumenti, &url, "Canzone", "audio", 320,
+                              &cartella, true, processo.clone(), annullato.clone(), avvisa.clone()).unwrap();
+        assert!(rifatto.to_string_lossy().ends_with("Canzone.mp3"));
+        assert_ne!(fs::metadata(&rifatto).unwrap().len(), vecchio);
 
         // Restano solo i tre file finali, nessun file intermedio
         let mut nomi: Vec<String> = fs::read_dir(&cartella).unwrap()
@@ -743,7 +783,7 @@ mod test {
             }
         });
         let risultato = scarica(&strumenti, &url, "Da annullare", "video", 360,
-                                &cartella, processo, annullato, avvisa);
+                                &cartella, false, processo, annullato, avvisa);
         assert_eq!(risultato, Err("annullato".to_string()));
         // Nessun file a metà deve restare
         assert_eq!(fs::read_dir(&cartella).unwrap().count(), 0);

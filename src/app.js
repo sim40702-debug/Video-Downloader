@@ -18,6 +18,7 @@ function elemento(id) {
 let video = null;              // informazioni del video analizzato
 let modalita = "video";        // "video" oppure "audio"
 let cartella = "";             // dove salvare
+let imp = null;                // le impostazioni (finestra Impostazioni)
 let analizzando = false;       // true mentre legge un link
 let aggiornando = false;       // true mentre installa un aggiornamento
 
@@ -100,23 +101,27 @@ function piedeIniziale() {
   messaggioPiede(`I file andranno nella cartella ${nomeCartella(cartella)}.`);
 }
 
-// ---------- Impostazioni ricordate ----------
-// Restano salvate anche quando chiudi l'app (localStorage)
+// ---------- Impostazioni ----------
+// Sono salvate dalla parte Rust (impostazioni.json) e condivise
+// con la finestra Impostazioni.
 
-function salvaImpostazione(nome, valore) {
+async function salvaImpostazioni() {
   try {
-    localStorage.setItem(nome, valore);
+    await invoke("salva_impostazioni", { impostazioni: imp });
   } catch (errore) {
-    // se non si puo' salvare, pazienza: l'app funziona lo stesso
+    console.error(errore);
   }
 }
 
-function leggiImpostazione(nome) {
-  try {
-    return localStorage.getItem(nome);
-  } catch (errore) {
-    return null;
-  }
+function applicaTema() {
+  document.documentElement.dataset.tema = imp.tema;
+}
+
+// Nome del file secondo Impostazioni > Download > Nome del file
+function nomeFile(voce) {
+  if (imp.nome_file === "canale-titolo" && voce.canale) return `${voce.canale} - ${voce.titolo}`;
+  if (imp.nome_file === "data-titolo" && voce.data) return `${voce.data} - ${voce.titolo}`;
+  return voce.titolo;
 }
 
 // ---------- Primo avvio: componenti ----------
@@ -215,15 +220,16 @@ function riempiQualita() {
       if (video.durata) testo += `, circa ${formattaByte((q.kbps * 1000 * video.durata) / 8)}`;
       menu.add(new Option(testo, q.kbps));
     }
-    menu.value = "192";
+    menu.value = String(imp.qualita_audio);
   } else {
     for (const q of video.qualita) {
       let testo = nomeQualita(q.altezza);
       if (q.dimensione) testo += `, circa ${formattaByte(q.dimensione)}`;
       menu.add(new Option(testo, q.altezza));
     }
-    // Di base 1080p (o la piu' alta sotto 1080p)
-    const scelta = video.qualita.find((q) => q.altezza <= 1080) || video.qualita[0];
+    // Di base la qualita' delle Impostazioni (o la migliore piu' bassa)
+    const scelta =
+      video.qualita.find((q) => q.altezza <= imp.qualita_video) || video.qualita[video.qualita.length - 1];
     if (scelta) menu.value = String(scelta.altezza);
   }
 }
@@ -233,7 +239,6 @@ function riempiQualita() {
 function scegliModalita(nuova) {
   if (aggiornando) return;
   modalita = nuova;
-  salvaImpostazione("modalita", nuova);
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
     pulsante.setAttribute("aria-checked", pulsante.dataset.modalita === nuova ? "true" : "false");
   }
@@ -248,7 +253,8 @@ async function cambiaCartella() {
   const scelta = await invoke("scegli_cartella", { attuale: cartella });
   if (scelta) {
     cartella = scelta;
-    salvaImpostazione("cartella", scelta);
+    imp.cartella = scelta;
+    salvaImpostazioni();
     mostraCartella();
     piedeIniziale();
   }
@@ -277,6 +283,8 @@ function aggiungiAllaCoda(dati) {
     url: dati.url,
     titolo: dati.titolo,
     copertina: dati.copertina || "",
+    canale: dati.canale || "",
+    data: dati.data || "",
     analizzato: dati.analizzato,
     modalita: dati.modalita,
     qualita: dati.qualita,
@@ -320,6 +328,8 @@ async function scaricaVoce(voce) {
       voce.url = info.url;
       voce.titolo = info.titolo;
       voce.copertina = info.copertina;
+      voce.canale = info.canale;
+      voce.data = info.data || "";
       voce.analizzato = true;
       mostraCopertinaVoce(voce);
     }
@@ -329,7 +339,7 @@ async function scaricaVoce(voce) {
     voce.elementi.riga.scrollIntoView({ block: "nearest" }); // resta in vista
     voce.file = await invoke("scarica", {
       url: voce.url,
-      titolo: voce.titolo,
+      titolo: nomeFile(voce),
       modalita: voce.modalita,
       qualita: voce.qualita,
       cartella: voce.cartella,
@@ -350,7 +360,7 @@ async function scaricaVoce(voce) {
 
 // Notifica del sistema, solo se stai usando un'altra app
 function avvisaSeInSottofondo(titolo, testo) {
-  if (!document.hasFocus()) {
+  if (imp.notifiche && !document.hasFocus()) {
     invoke("notifica", { titolo: titolo, testo: testo });
   }
 }
@@ -509,6 +519,8 @@ function scarica() {
     url: video.url,
     titolo: video.titolo,
     copertina: video.copertina,
+    canale: video.canale,
+    data: video.data || "",
     analizzato: true,
     modalita: modalita,
     qualita: Number(elemento("qualita").value),
@@ -533,7 +545,7 @@ function linkNelTesto(testo) {
 function incollaPiuLink(link) {
   // Senza analisi non conosciamo le qualita': usiamo la scelta attuale o quella consigliata
   let qualita = Number(elemento("qualita").value);
-  if (!qualita) qualita = modalita === "audio" ? 192 : 1080;
+  if (!qualita) qualita = modalita === "audio" ? imp.qualita_audio : imp.qualita_video;
   let aggiunti = 0;
   for (const url of link) {
     const ok = aggiungiAllaCoda({
@@ -564,7 +576,6 @@ function aggiornaPulsanti() {
   elemento("link").disabled = analizzando || aggiornando;
   elemento("qualita").disabled = aggiornando || video === null;
   elemento("pulsante-cartella").disabled = aggiornando;
-  elemento("pulsante-cerca").disabled = aggiornando;
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
     pulsante.disabled = aggiornando;
   }
@@ -573,50 +584,20 @@ function aggiornaPulsanti() {
 // ---------- Aggiornamenti dell'app ----------
 
 let versioneAttuale = "";
-let versioneNuova = null; // es. "0.1.1" se c'e' un aggiornamento
+let versioneNuova = null; // es. "0.1.3" se c'e' un aggiornamento
 
-// Scrive la riga "Versione" (testo + pulsante a destra)
-function mostraVersione(testo, testoPulsante) {
-  elemento("testo-versione").textContent = testo;
-  const pulsante = elemento("pulsante-cerca");
-  pulsante.hidden = testoPulsante === "";
-  pulsante.textContent = testoPulsante;
-}
-
-// silenzioso = true all'avvio: se non c'e' niente di nuovo non lo dice
-async function controllaAggiornamento(silenzioso) {
-  mostraVersione(versioneAttuale, "Controllo...");
-  elemento("pulsante-cerca").disabled = true;
+// Chiede a GitHub se c'e' una versione nuova: se si', mostra l'avviso in alto
+async function controllaAggiornamento() {
   try {
     const nuova = await invoke("controlla_aggiornamento");
     if (nuova) {
       versioneNuova = nuova.versione;
-      mostraVersione(`${versioneAttuale}, è disponibile la ${nuova.versione}`, "Aggiorna");
       elemento("testo-aggiornamento").textContent =
         `È disponibile la versione ${nuova.versione} (hai la ${versioneAttuale}).`;
       elemento("barra-aggiornamento").hidden = false;
-    } else {
-      versioneNuova = null;
-      mostraVersione(silenzioso ? versioneAttuale : `${versioneAttuale}, è l'ultima`, "Cerca aggiornamenti");
     }
   } catch (errore) {
-    // Senza Internet all'avvio non diciamo niente
-    if (silenzioso) {
-      mostraVersione(versioneAttuale, "Cerca aggiornamenti");
-    } else {
-      mostraVersione(`${versioneAttuale}, controllo non riuscito`, "Riprova");
-    }
-  }
-  elemento("pulsante-cerca").disabled = aggiornando;
-}
-
-// Il pulsante nella riga "Versione"
-function clicVersione() {
-  if (aggiornando) return;
-  if (versioneNuova) {
-    installaAggiornamento();
-  } else {
-    controllaAggiornamento(false);
+    // Senza Internet non diciamo niente: riproveremo al prossimo avvio
   }
 }
 
@@ -626,6 +607,9 @@ async function installaAggiornamento() {
     messaggioPiede("Aspetta che finiscano i download, poi aggiorna l'app.", true);
     return;
   }
+  if (versioneNuova === null) await controllaAggiornamento();
+  if (versioneNuova === null) return;
+
   aggiornando = true;
   aggiornaPulsanti();
   elemento("barra-aggiornamento").hidden = true;
@@ -633,7 +617,6 @@ async function installaAggiornamento() {
   elemento("barra").style.width = "0%";
   elemento("testo-stato").textContent = "Scarico l'aggiornamento...";
   elemento("dettagli-avanzamento").textContent = `versione ${versioneNuova}`;
-  mostraVersione(`${versioneAttuale}, aggiorno alla ${versioneNuova}`, "");
 
   try {
     await invoke("installa_aggiornamento"); // alla fine l'app si riavvia da sola
@@ -642,7 +625,7 @@ async function installaAggiornamento() {
     messaggioPiede(errore, true);
     aggiornando = false;
     aggiornaPulsanti();
-    mostraVersione(`${versioneAttuale}, aggiornamento non riuscito`, "Aggiorna");
+    elemento("barra-aggiornamento").hidden = false;
   }
 }
 
@@ -663,25 +646,40 @@ function mostraPrincipale() {
   elemento("preparazione").hidden = true;
   elemento("principale").hidden = false;
   elemento("link").focus();
-  invoke("aggiorna_ytdlp"); // in sottofondo
+  // In sottofondo: yt-dlp si aggiorna da solo (Impostazioni > Componenti)
+  if (imp.aggiorna_ytdlp) invoke("aggiorna_ytdlp").catch(() => {});
+}
+
+function apriImpostazioni() {
+  invoke("apri_impostazioni");
 }
 
 async function avvio() {
   versioneAttuale = await invoke("versione_app");
-  mostraVersione(versioneAttuale, "Cerca aggiornamenti");
+  imp = await invoke("leggi_impostazioni");
+  applicaTema();
 
-  // La cartella dell'ultima volta, se esiste ancora; altrimenti Download
-  const salvata = leggiImpostazione("cartella");
-  if (salvata && (await invoke("esiste_cartella", { percorso: salvata }))) {
-    cartella = salvata;
+  // Chi aveva gia' scelto una cartella con la versione 0.1.1 la ritrova
+  let vecchiaCartella = null;
+  try {
+    vecchiaCartella = localStorage.getItem("cartella");
+  } catch (errore) {}
+  if (!imp.cartella && vecchiaCartella) {
+    imp.cartella = vecchiaCartella;
+    salvaImpostazioni();
+  }
+
+  // La cartella delle Impostazioni, se esiste ancora; altrimenti Download
+  if (imp.cartella && (await invoke("esiste_cartella", { percorso: imp.cartella }))) {
+    cartella = imp.cartella;
   } else {
     cartella = await invoke("cartella_download");
   }
   mostraCartella();
   piedeIniziale();
 
-  // Video o Audio, come l'ultima volta
-  if (leggiImpostazione("modalita") === "audio") scegliModalita("audio");
+  // Video o Audio, come in Impostazioni > Quando apri l'app
+  scegliModalita(imp.formato === "audio" ? "audio" : "video");
 
   mostraVideo();
   aggiornaPulsanti();
@@ -714,7 +712,27 @@ async function avvio() {
   elemento("pulsante-pulisci").addEventListener("click", togliCompletati);
   elemento("pulsante-prepara").addEventListener("click", preparaComponenti);
   elemento("pulsante-aggiorna").addEventListener("click", installaAggiornamento);
-  elemento("pulsante-cerca").addEventListener("click", clicVersione);
+  elemento("pulsante-impostazioni").addEventListener("click", apriImpostazioni);
+
+  // Ctrl+, (Windows) apre le Impostazioni; sul Mac ⌘, lo fa il menu
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === ",") apriImpostazioni();
+  });
+
+  // Quando cambi qualcosa nella finestra Impostazioni
+  listen("impostazioni", async (evento) => {
+    imp = evento.payload;
+    applicaTema();
+    const nuova = imp.cartella || (await invoke("cartella_download"));
+    if (nuova !== cartella) {
+      cartella = nuova;
+      mostraCartella();
+      piedeIniziale();
+    }
+    if (video !== null) riempiQualita();
+  });
+  // "Aggiorna" premuto nella finestra Impostazioni
+  listen("avvia-aggiornamento", () => installaAggiornamento());
 
   const mancanti = await invoke("componenti_mancanti");
   if (mancanti.length > 0) {
@@ -723,7 +741,7 @@ async function avvio() {
     mostraPrincipale();
   }
 
-  controllaAggiornamento(true);
+  if (imp.controlla_aggiornamenti) controllaAggiornamento();
 }
 
 avvio();

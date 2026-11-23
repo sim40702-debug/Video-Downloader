@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impostazioni</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="finestra-impostazioni">
+
+  <!-- Le tre schede in alto -->
+  <nav class="schede" role="tablist" aria-label="Impostazioni">
+    <button type="button" class="scheda" role="tab" data-scheda="generali" aria-selected="true">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 5h18M2 11h18M2 17h18"/><circle cx="7" cy="5" r="2.4" fill="currentColor"/><circle cx="15" cy="11" r="2.4" fill="currentColor"/><circle cx="9" cy="17" r="2.4" fill="currentColor"/></svg>
+      <span>Generali</span>
+    </button>
+    <button type="button" class="scheda" role="tab" data-scheda="download" aria-selected="false">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2v12M6 9.5l5 5 5-5"/><path d="M3 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+      <span>Download</span>
+    </button>
+    <button type="button" class="scheda" role="tab" data-scheda="componenti" aria-selected="false">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 2l8 4.5v9L11 20l-8-4.5v-9z"/><path d="M3 6.5l8 4.5 8-4.5M11 11v9"/></svg>
+      <span>Componenti</span>
+    </button>
+  </nav>
+
+  <!-- ================= Generali ================= -->
+  <section class="pannello" id="pannello-generali">
+    <h2>Aspetto</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <span>Tema</span>
+        <div class="segmenti tre" role="radiogroup" aria-label="Tema">
+          <button type="button" role="radio" data-tema="automatico">Automatico</button>
+          <button type="button" role="radio" data-tema="chiaro">Chiaro</button>
+          <button type="button" role="radio" data-tema="scuro">Scuro</button>
+        </div>
+      </div>
+    </div>
+    <p class="nota">Automatico usa lo stesso aspetto che hai scelto nel Mac o in Windows.</p>
+
+    <h2>Notifiche</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <label for="notifiche">Avvisami quando un download finisce</label>
+        <input type="checkbox" class="interruttore" id="notifiche" role="switch">
+      </div>
+    </div>
+    <p class="nota">Arriva solo se in quel momento stai usando un'altra app.</p>
+
+    <h2>Aggiornamenti</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <label for="controlla-aggiornamenti">Cerca aggiornamenti all'avvio</label>
+        <input type="checkbox" class="interruttore" id="controlla-aggiornamenti" role="switch">
+      </div>
+      <div class="riga-imp">
+        <span id="testo-versione">Versione</span>
+        <span class="destra">
+          <span id="stato-versione" class="secondario"></span>
+          <button type="button" id="pulsante-versione" class="piccolo">Cerca adesso</button>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Download ================= -->
+  <section class="pannello" id="pannello-download" hidden>
+    <h2>Dove salvare</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <span>Cartella</span>
+        <span class="destra">
+          <span class="cartella secondario" id="cartella">
+            <svg width="14" height="11" viewBox="0 0 14 12" fill="currentColor" aria-hidden="true"><path d="M1 2.5a1 1 0 011-1h3l1.3 1.5H12a1 1 0 011 1V10a1 1 0 01-1 1H2a1 1 0 01-1-1z"/></svg>
+            <span id="nome-cartella">Downloads</span>
+          </span>
+          <button type="button" id="pulsante-cartella" class="piccolo">Cambia...</button>
+        </span>
+      </div>
+    </div>
+
+    <h2>Quando apri l'app</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <span>Formato</span>
+        <div class="segmenti" role="radiogroup" aria-label="Formato">
+          <button type="button" role="radio" data-formato="video">Video</button>
+          <button type="button" role="radio" data-formato="audio">Audio</button>
+        </div>
+      </div>
+      <div class="riga-imp">
+        <label for="qualita-video">Qualità video</label>
+        <select id="qualita-video">
+          <option value="2160">2160p 4K</option>
+          <option value="1440">1440p 2K</option>
+          <option value="1080">1080p Full HD</option>
+          <option value="720">720p HD</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+      </div>
+      <div class="riga-imp">
+        <label for="qualita-audio">Qualità audio</label>
+        <select id="qualita-audio">
+          <option value="320">320 kbps, massima</option>
+          <option value="256">256 kbps</option>
+          <option value="192">192 kbps, consigliata</option>
+          <option value="128">128 kbps, file più piccolo</option>
+        </select>
+      </div>
+    </div>
+    <p class="nota">Se la qualità scelta non c'è, prende la migliore più bassa.</p>
+
+    <h2>File</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <label for="nome-file">Nome del file</label>
+        <select id="nome-file">
+          <option value="titolo">Titolo del video</option>
+          <option value="canale-titolo">Canale - Titolo</option>
+          <option value="data-titolo">Data - Titolo</option>
+        </select>
+      </div>
+      <div class="riga-imp">
+        <label for="se-esiste">Se esiste già</label>
+        <select id="se-esiste">
+          <option value="copia">Crea una copia, Titolo (2)</option>
+          <option value="sostituisci">Sostituisci il file</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Componenti ================= -->
+  <section class="pannello" id="pannello-componenti" hidden>
+    <h2>Programmi usati dall'app</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp alta">
+        <span><b>yt-dlp</b><small>Legge i video e li scarica</small></span>
+        <span class="secondario" id="versione-yt-dlp">...</span>
+      </div>
+      <div class="riga-imp alta">
+        <span><b>FFmpeg</b><small>Unisce video e audio, crea gli MP3</small></span>
+        <span class="secondario" id="versione-ffmpeg">...</span>
+      </div>
+      <div class="riga-imp alta">
+        <span><b>Deno</b><small>Serve a yt-dlp per leggere YouTube</small></span>
+        <span class="secondario" id="versione-deno">...</span>
+      </div>
+    </div>
+
+    <h2>yt-dlp</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <label for="aggiorna-ytdlp">Aggiorna yt-dlp a ogni avvio</label>
+        <input type="checkbox" class="interruttore" id="aggiorna-ytdlp" role="switch">
+      </div>
+      <div class="riga-imp">
+        <span id="ultimo-controllo">Ultimo controllo: mai</span>
+        <button type="button" id="pulsante-aggiorna-ytdlp" class="piccolo">Aggiorna adesso</button>
+      </div>
+    </div>
+    <p class="nota">Se YouTube cambia qualcosa basta aggiornare yt-dlp, senza una versione nuova dell'app.</p>
+
+    <h2>Ripristino</h2>
+    <div class="gruppo-imp">
+      <div class="riga-imp">
+        <span>Torna alle impostazioni di partenza</span>
+        <button type="button" id="pulsante-ripristina" class="piccolo">Ripristina</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="impostazioni.js"></script>
+</body>
+</html>
