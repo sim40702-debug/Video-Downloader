@@ -97,8 +97,18 @@ function messaggioPiede(testo, errore = false) {
   p.classList.toggle("secondario", !errore);
 }
 
+// Sopra il pulsante: quanti download ci sono, oppure dove vanno i file
 function piedeIniziale() {
-  messaggioPiede(`I file andranno nella cartella ${nomeCartella(cartella)}.`);
+  const inCorso = coda.filter((v) => v.stato === "analisi" || v.stato === "download").length;
+  const inCoda = coda.filter((v) => v.stato === "attesa").length;
+  if (inCorso + inCoda > 0) {
+    const pezzi = [];
+    if (inCorso > 0) pezzi.push(`${inCorso} in download`);
+    if (inCoda > 0) pezzi.push(`${inCoda} in coda`);
+    messaggioPiede(pezzi.join(", "));
+  } else {
+    messaggioPiede(`I file andranno nella cartella ${nomeCartella(cartella)}.`);
+  }
 }
 
 // ---------- Impostazioni ----------
@@ -122,6 +132,13 @@ function nomeFile(voce) {
   if (imp.nome_file === "canale-titolo" && voce.canale) return `${voce.canale} - ${voce.titolo}`;
   if (imp.nome_file === "data-titolo" && voce.data) return `${voce.data} - ${voce.titolo}`;
   return voce.titolo;
+}
+
+// Mette nel pannello a destra i valori delle impostazioni
+function mostraImpostazioniPannello() {
+  elemento("nome-file").value = imp.nome_file;
+  elemento("notifiche").checked = imp.notifiche;
+  elemento("aggiorna-ytdlp").checked = imp.aggiorna_ytdlp;
 }
 
 // ---------- Primo avvio: componenti ----------
@@ -181,27 +198,74 @@ async function analizza() {
 function mostraVideo() {
   const copertina = elemento("copertina");
   if (video === null) {
-    elemento("titolo").textContent = "Nessun video";
-    elemento("dettagli").textContent =
-      "Incolla un link e premi Analizza: qui vedrai titolo, durata e qualità disponibili.";
     copertina.hidden = true;
+    elemento("anteprima-vuota").hidden = false;
+    elemento("titolo").hidden = true;
+    elemento("dettagli").hidden = true;
+    elemento("chip-qualita").hidden = true;
+    elemento("chip-canale").hidden = true;
+    elemento("chip-durata").hidden = true;
     riempiQualita();
     return;
   }
 
-  elemento("titolo").textContent = video.titolo;
-  const righe = [];
-  if (video.canale) righe.push(video.canale);
-  const seconda = [];
-  if (video.durata != null) seconda.push(formattaDurata(video.durata));
-  if (video.visualizzazioni != null) seconda.push(`${formattaNumero(video.visualizzazioni)} visualizzazioni`);
-  if (seconda.length > 0) righe.push(seconda.join(", "));
-  elemento("dettagli").innerText = righe.join("\n");
-
+  elemento("anteprima-vuota").hidden = true;
   copertina.src = video.copertina;
   copertina.hidden = false;
   copertina.onerror = () => (copertina.hidden = true);
+
+  elemento("titolo").textContent = video.titolo;
+  elemento("titolo").hidden = false;
+
+  // Sotto il titolo: visualizzazioni e data
+  const pezzi = [];
+  if (video.visualizzazioni != null) pezzi.push(`${formattaNumero(video.visualizzazioni)} visualizzazioni`);
+  if (video.data) pezzi.push(`pubblicato il ${dataLeggibile(video.data)}`);
+  elemento("dettagli").textContent = pezzi.join(", ");
+  elemento("dettagli").hidden = pezzi.length === 0;
+
+  // Etichette sopra l'immagine
+  mostraEtichetta("chip-qualita", qualitaMassima());
+  mostraEtichetta("chip-durata", durataCorta(video.durata));
+  const canale = elemento("chip-canale");
+  canale.hidden = !video.canale;
+  canale.innerHTML = '<i class="chip-pallino"></i>';
+  canale.append(video.canale || "");
+
   riempiQualita();
+}
+
+function mostraEtichetta(id, testo) {
+  elemento(id).textContent = testo;
+  elemento(id).hidden = !testo;
+}
+
+// "Fino a 4K" in base alla qualita' piu' alta del video
+function qualitaMassima() {
+  if (!video.qualita || video.qualita.length === 0) return "";
+  const altezza = Math.max(...video.qualita.map((q) => q.altezza));
+  const nomi = { 2160: "4K", 1440: "2K", 1080: "Full HD", 720: "HD" };
+  return "Fino a " + (nomi[altezza] || altezza + "p");
+}
+
+// 212 -> "3:32"   3725 -> "1:02:05"
+function durataCorta(secondi) {
+  if (secondi == null) return "";
+  secondi = Math.round(secondi);
+  const ore = Math.floor(secondi / 3600);
+  const minuti = Math.floor((secondi % 3600) / 60);
+  const resto = String(secondi % 60).padStart(2, "0");
+  if (ore > 0) return `${ore}:${String(minuti).padStart(2, "0")}:${resto}`;
+  return `${minuti}:${resto}`;
+}
+
+// "2026-11-15" -> "15 novembre 2026"
+function dataLeggibile(testo) {
+  const mesi = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+    "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+  const pezzi = testo.split("-");
+  if (pezzi.length !== 3) return testo;
+  return `${Number(pezzi[2])} ${mesi[Number(pezzi[1]) - 1]} ${pezzi[0]}`;
 }
 
 // Riempie il menu "Qualità" in base a Video o Audio
@@ -210,28 +274,41 @@ function riempiQualita() {
   menu.innerHTML = "";
 
   if (video === null) {
-    menu.add(new Option("Analizza prima un link", ""));
+    menu.add(new Option("Analizza un link", ""));
+    mostraDimensione();
     return;
   }
 
   if (modalita === "audio") {
     for (const q of qualitaAudio) {
-      let testo = q.nome;
-      if (video.durata) testo += `, circa ${formattaByte((q.kbps * 1000 * video.durata) / 8)}`;
-      menu.add(new Option(testo, q.kbps));
+      menu.add(new Option(q.nome, q.kbps));
     }
     menu.value = String(imp.qualita_audio);
   } else {
     for (const q of video.qualita) {
-      let testo = nomeQualita(q.altezza);
-      if (q.dimensione) testo += `, circa ${formattaByte(q.dimensione)}`;
-      menu.add(new Option(testo, q.altezza));
+      menu.add(new Option(nomeQualita(q.altezza), q.altezza));
     }
     // Di base la qualita' delle Impostazioni (o la migliore piu' bassa)
     const scelta =
       video.qualita.find((q) => q.altezza <= imp.qualita_video) || video.qualita[video.qualita.length - 1];
     if (scelta) menu.value = String(scelta.altezza);
   }
+  mostraDimensione();
+}
+
+// Riga "Dimensione": quanto pesera' piu' o meno il file
+function mostraDimensione() {
+  let byte = 0;
+  if (video !== null) {
+    const scelta = Number(elemento("qualita").value);
+    if (modalita === "audio") {
+      if (video.durata) byte = (scelta * 1000 * video.durata) / 8;
+    } else {
+      const q = video.qualita.find((q) => q.altezza === scelta);
+      if (q && q.dimensione) byte = q.dimensione;
+    }
+  }
+  elemento("dimensione").textContent = byte ? `circa ${formattaByte(byte)}` : "-";
 }
 
 // ---------- Video / Audio ----------
@@ -262,7 +339,7 @@ async function cambiaCartella() {
 
 function mostraCartella() {
   elemento("nome-cartella").textContent = nomeCartella(cartella);
-  elemento("pulsante-cartella").title = cartella;
+  elemento("nome-cartella").title = cartella;
 }
 
 // ---------- Coda dei download ----------
@@ -485,6 +562,12 @@ function aggiornaElenco() {
   elemento("coda").hidden = coda.length === 0;
   const finiti = coda.some((v) => v.stato === "fatto" || v.stato === "errore" || v.stato === "annullato");
   elemento("pulsante-pulisci").hidden = !finiti;
+
+  // In alto: quanti download ci sono nell'elenco
+  elemento("conteggio").textContent =
+    coda.length === 0 ? "" : coda.length === 1 ? "1 download" : `${coda.length} download`;
+
+  piedeIniziale();
 }
 
 listen("progresso", (evento) => {
@@ -575,6 +658,7 @@ function aggiornaPulsanti() {
   elemento("pulsante-analizza").disabled = analizzando || aggiornando;
   elemento("link").disabled = analizzando || aggiornando;
   elemento("qualita").disabled = aggiornando || video === null;
+  elemento("nome-file").disabled = aggiornando;
   elemento("pulsante-cartella").disabled = aggiornando;
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
     pulsante.disabled = aggiornando;
@@ -658,6 +742,7 @@ async function avvio() {
   versioneAttuale = await invoke("versione_app");
   imp = await invoke("leggi_impostazioni");
   applicaTema();
+  mostraImpostazioniPannello();
 
   // Chi aveva gia' scelto una cartella con la versione 0.1.1 la ritrova
   let vecchiaCartella = null;
@@ -708,6 +793,19 @@ async function avvio() {
     pulsante.addEventListener("click", () => scegliModalita(pulsante.dataset.modalita));
   }
   elemento("pulsante-cartella").addEventListener("click", cambiaCartella);
+  elemento("qualita").addEventListener("change", mostraDimensione);
+  elemento("nome-file").addEventListener("change", (e) => {
+    imp.nome_file = e.target.value;
+    salvaImpostazioni();
+  });
+  elemento("notifiche").addEventListener("change", (e) => {
+    imp.notifiche = e.target.checked;
+    salvaImpostazioni();
+  });
+  elemento("aggiorna-ytdlp").addEventListener("change", (e) => {
+    imp.aggiorna_ytdlp = e.target.checked;
+    salvaImpostazioni();
+  });
   elemento("pulsante-scarica").addEventListener("click", scarica);
   elemento("pulsante-pulisci").addEventListener("click", togliCompletati);
   elemento("pulsante-prepara").addEventListener("click", preparaComponenti);
@@ -723,6 +821,7 @@ async function avvio() {
   listen("impostazioni", async (evento) => {
     imp = evento.payload;
     applicaTema();
+    mostraImpostazioniPannello();
     const nuova = imp.cartella || (await invoke("cartella_download"));
     if (nuova !== cartella) {
       cartella = nuova;
