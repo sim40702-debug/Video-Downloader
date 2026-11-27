@@ -101,10 +101,12 @@ function messaggioPiede(testo, errore = false) {
 function piedeIniziale() {
   const inCorso = coda.filter((v) => v.stato === "analisi" || v.stato === "download").length;
   const inCoda = coda.filter((v) => v.stato === "attesa").length;
-  if (inCorso + inCoda > 0) {
+  const inLista = contaLista();
+  if (inCorso + inCoda + inLista > 0) {
     const pezzi = [];
     if (inCorso > 0) pezzi.push(`${inCorso} in download`);
     if (inCoda > 0) pezzi.push(`${inCoda} in coda`);
+    if (inLista > 0) pezzi.push(`${inLista} in lista`);
     messaggioPiede(pezzi.join(", "));
   } else {
     messaggioPiede(`I file andranno nella cartella ${nomeCartella(cartella)}.`);
@@ -273,8 +275,17 @@ function riempiQualita() {
   const menu = elemento("qualita");
   menu.innerHTML = "";
 
+  // Senza video analizzato: qualita' generiche, valgono per la lista
   if (video === null) {
-    menu.add(new Option("Analizza un link", ""));
+    if (modalita === "audio") {
+      for (const q of qualitaAudio) menu.add(new Option(q.nome, q.kbps));
+      menu.value = String(imp.qualita_audio);
+    } else {
+      for (const altezza of [2160, 1440, 1080, 720, 480]) {
+        menu.add(new Option("Fino a " + nomeQualita(altezza), altezza));
+      }
+      menu.value = String(imp.qualita_video);
+    }
     mostraDimensione();
     return;
   }
@@ -344,11 +355,13 @@ function mostraCartella() {
 
 // ---------- Coda dei download ----------
 
-// Mette un download nella coda e, se non sta gia' scaricando, parte
-function aggiungiAllaCoda(dati) {
+// Mette un download nella coda e, se non sta gia' scaricando, parte.
+// Con subito = false va solo nella lista: parte quando premi "Scarica".
+function aggiungiAllaCoda(dati, subito = true) {
   const giaPresente = coda.find(
-    (v) => v.url === dati.url && v.modalita === dati.modalita &&
-      (v.stato === "attesa" || v.stato === "analisi" || v.stato === "download")
+    (v) => v.url === dati.url &&
+      (v.stato === "lista" ||
+        (v.modalita === dati.modalita && (v.stato === "attesa" || v.stato === "analisi" || v.stato === "download")))
   );
   if (giaPresente) {
     messaggioLink("Questo video è già nell'elenco dei download.", true);
@@ -366,8 +379,8 @@ function aggiungiAllaCoda(dati) {
     modalita: dati.modalita,
     qualita: dati.qualita,
     cartella: cartella,
-    stato: "attesa",        // attesa, analisi, download, fatto, errore, annullato
-    testo: "In coda",
+    stato: subito ? "attesa" : "lista", // lista, attesa, analisi, download, fatto, errore, annullato
+    testo: subito ? "In coda" : "In lista",
     percentuale: 0,
     file: null,
     annullata: false,
@@ -375,8 +388,96 @@ function aggiungiAllaCoda(dati) {
   prossimoNumero++;
   coda.push(voce);
   creaVoce(voce);
-  avviaCoda();
+  if (subito) {
+    avviaCoda();
+  } else {
+    leggiTitoli();
+  }
   return true;
+}
+
+// ---------- Lista ----------
+// Metti tanti link nella lista, poi scegli Video o Audio e premi Scarica:
+// partono tutti, uno alla volta.
+
+function contaLista() {
+  return coda.filter((v) => v.stato === "lista").length;
+}
+
+// Pulsante "Aggiungi alla lista": il video analizzato o i link nel campo
+function aggiungiAllaLista() {
+  if (aggiornando) return;
+  if (video !== null) {
+    const ok = aggiungiAllaCoda({
+      url: video.url,
+      titolo: video.titolo,
+      copertina: video.copertina,
+      canale: video.canale,
+      data: video.data || "",
+      analizzato: true,
+      modalita: modalita,
+      qualita: 0,
+    }, false);
+    if (ok) {
+      video = null;
+      mostraVideo();
+      elemento("link").value = "";
+      messaggioLink("Aggiunto alla lista. Incolla il prossimo link.");
+    }
+  } else {
+    const link = linkNelTesto(elemento("link").value);
+    if (link.length === 0) {
+      messaggioLink("Incolla prima il link di un video.", true);
+      return;
+    }
+    incollaPiuLink(link);
+    elemento("link").value = "";
+  }
+  elemento("link").focus();
+  aggiornaPulsanti();
+}
+
+// Pulsante "Scarica" senza video analizzato: parte tutta la lista
+function scaricaLista() {
+  let qualita = Number(elemento("qualita").value);
+  if (!qualita) qualita = modalita === "audio" ? imp.qualita_audio : imp.qualita_video;
+  for (const voce of coda) {
+    if (voce.stato === "lista") {
+      voce.modalita = modalita;
+      voce.qualita = qualita;
+      voce.cartella = cartella;
+      cambiaStato(voce, "attesa", "In coda");
+    }
+  }
+  messaggioLink("");
+  avviaCoda();
+}
+
+// In sottofondo legge titolo e copertina dei link nella lista, uno alla volta
+let leggendoTitoli = false;
+
+async function leggiTitoli() {
+  if (leggendoTitoli) return;
+  leggendoTitoli = true;
+  let voce = coda.find((v) => v.stato === "lista" && !v.analizzato && !v.illeggibile);
+  while (voce) {
+    try {
+      const info = await invoke("analizza", { url: voce.url });
+      if (!voce.analizzato) {
+        voce.url = info.url;
+        voce.titolo = info.titolo;
+        voce.copertina = info.copertina;
+        voce.canale = info.canale;
+        voce.data = info.data || "";
+        voce.analizzato = true;
+        mostraCopertinaVoce(voce);
+      }
+    } catch (errore) {
+      voce.illeggibile = true; // ci riprova quando lo scarica
+    }
+    voce = coda.find((v) => v.stato === "lista" && !v.analizzato && !v.illeggibile);
+  }
+  leggendoTitoli = false;
 }
 
 // Prende le voci "in coda" una alla volta e le scarica
@@ -446,7 +547,7 @@ function avvisaSeInSottofondo(titolo, testo) {
 function clicPulsanteVoce(voce) {
   if (voce.stato === "fatto") {
     invoke("mostra_file", { percorso: voce.file });
-  } else if (voce.stato === "attesa") {
+  } else if (voce.stato === "attesa" || voce.stato === "lista") {
     togliVoce(voce);
   } else if (voce.stato === "analisi" || voce.stato === "download") {
     voce.annullata = true;
@@ -550,7 +651,8 @@ function disegnaVoce(voce) {
     e.pulsante.disabled = false;
   } else {
     e.pulsante.innerHTML = iconaFerma;
-    if (voce.stato === "attesa") e.pulsante.title = "Togli dall'elenco";
+    if (voce.stato === "lista") e.pulsante.title = "Togli dalla lista";
+    else if (voce.stato === "attesa") e.pulsante.title = "Togli dall'elenco";
     else if (voce.stato === "errore" || voce.stato === "annullato") e.pulsante.title = "Togli dall'elenco";
     else e.pulsante.title = "Ferma";
     if (voce.stato !== "analisi" && voce.stato !== "download") e.pulsante.disabled = false;
@@ -568,6 +670,7 @@ function aggiornaElenco() {
     coda.length === 0 ? "" : coda.length === 1 ? "1 download" : `${coda.length} download`;
 
   piedeIniziale();
+  aggiornaPulsanti();
 }
 
 listen("progresso", (evento) => {
@@ -597,7 +700,11 @@ listen("conversione", (evento) => {
 // ---------- Pulsante principale ----------
 
 function scarica() {
-  if (video === null || aggiornando) return;
+  if (aggiornando) return;
+  if (video === null) {
+    if (contaLista() > 0) scaricaLista();
+    return;
+  }
   const aggiunto = aggiungiAllaCoda({
     url: video.url,
     titolo: video.titolo,
@@ -637,27 +744,36 @@ function incollaPiuLink(link) {
       analizzato: false,
       modalita: modalita,
       qualita: qualita,
-    });
+    }, false);
     if (ok) aggiunti++;
   }
-  const cosa = modalita === "audio" ? "MP3" : "video";
-  messaggioLink(`Aggiunti ${aggiunti} link all'elenco dei download (${cosa}).`);
+  if (aggiunti === 1) {
+    messaggioLink("Aggiunto 1 link alla lista. Quando hai finito, scegli Video o Audio e premi Scarica.");
+  } else if (aggiunti > 1) {
+    messaggioLink(`Aggiunti ${aggiunti} link alla lista. Quando hai finito, scegli Video o Audio e premi Scarica.`);
+  }
 }
 
 // ---------- Pulsanti attivi o no ----------
 
 function aggiornaPulsanti() {
   const scarica = elemento("pulsante-scarica");
-  if (codaAttiva) {
+  const inLista = contaLista();
+  const cosa = modalita === "audio" ? "audio" : "video";
+  if (video === null && inLista > 0) {
+    // Nessun video aperto: il pulsante scarica tutta la lista
+    scarica.textContent = inLista === 1 ? `Scarica 1 ${cosa}` : `Scarica ${inLista} ${cosa}`;
+  } else if (codaAttiva) {
     scarica.textContent = "Aggiungi ai download";
   } else {
-    scarica.textContent = modalita === "audio" ? "Scarica audio" : "Scarica video";
+    scarica.textContent = `Scarica ${cosa}`;
   }
-  scarica.disabled = aggiornando || analizzando || video === null;
+  scarica.disabled = aggiornando || analizzando || (video === null && inLista === 0);
+  elemento("pulsante-lista").disabled = aggiornando || analizzando;
 
   elemento("pulsante-analizza").disabled = analizzando || aggiornando;
   elemento("link").disabled = analizzando || aggiornando;
-  elemento("qualita").disabled = aggiornando || video === null;
+  elemento("qualita").disabled = aggiornando;
   elemento("nome-file").disabled = aggiornando;
   elemento("pulsante-cartella").disabled = aggiornando;
   for (const pulsante of document.querySelectorAll(".segmenti button")) {
@@ -807,6 +923,7 @@ async function avvio() {
     salvaImpostazioni();
   });
   elemento("pulsante-scarica").addEventListener("click", scarica);
+  elemento("pulsante-lista").addEventListener("click", aggiungiAllaLista);
   elemento("pulsante-pulisci").addEventListener("click", togliCompletati);
   elemento("pulsante-prepara").addEventListener("click", preparaComponenti);
   elemento("pulsante-aggiorna").addEventListener("click", installaAggiornamento);
